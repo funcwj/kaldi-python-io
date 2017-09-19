@@ -39,7 +39,7 @@ def read_token(fd):
     key = ''
     while True:
         c = fd.read(1)
-        if c == ' ':
+        if c == ' ' or c == '':
             break
         key += c
     return None if key == '' else key.strip()
@@ -78,8 +78,9 @@ def read_index_tuple(fd):
 
 def read_index(fd, index, cur_set):
     """ read struct Index
-    reference static void ReadIndexVectorElementBinary(std::istream &is, 
-                                                      int32 i, std::vector<Index> *vec)
+        see:
+        static void ReadIndexVectorElementBinary(std::istream &is, 
+            int32 i, std::vector<Index> *vec)
     """
     c = struct.unpack('b', fd.read(1))[0]
     if index == 0:
@@ -142,28 +143,93 @@ def read_sparse_mat(fd):
     print sparse_mat
     return sparse_mat 
 
-def uncompress_data(data):
-    pass
+def uint16_to_floats(min_value, prange, pchead):
+    """
+    see matrix/compressed-matrix.cc
+    inline float CompressedMatrix::Uint16ToFloat(
+        const GlobalHeader &global_header, uint16 value)
+    """
+    p = []
+    for value in pchead:
+        p.append(float(min_value + prange * 1.52590218966964e-05 * value))
+    return p
 
-# waiting for implement 
+def uint8_to_float(char, pchead):
+    """
+    see matrix/compressed-matrix.cc
+    inline float CompressedMatrix::CharToFloat(
+        float p0, float p25, float p75, float p100, uint8 value)
+    """
+    if char <= 64:
+        return float(pchead[0] + (pchead[1] - pchead[0]) * char * (1 / 64.0))
+    elif char <= 192:
+        return float(pchead[1] + (pchead[2] - pchead[1]) * (char - 64) * (1 / 128.0))
+    else:
+        return float(pchead[2] + (pchead[3] - pchead[2]) * (char - 192) * (1 / 63.0))
+
+def uncompress(compress_data, cps_type, head):
+    min_value, prange, num_rows, num_cols = head
+    mat = np.zeros([num_rows, num_cols])
+    print '\tUncompress to matrix {} X {}'.format(num_rows, num_cols)
+    """ In format CM(kOneByteWithColHeaders):
+        PerColHeader, ...(x C), ... uint8 sequence ...
+            first: get each PerColHeader pch for a single column
+            then : using pch to uncompress each float in the column
+        We load it seperately at a time 
+        In format CM2(kTwoByte):
+        ...uint16 sequence...
+        In format CM3(kOneByte):
+        ...uint8 sequence...
+    """
+    if cps_type == 'CM':
+        # checking compressed data size, 8 is the sizeof PerColHeader
+        assert len(compress_data) == num_cols * (8 + num_rows)
+        # type uint16
+        phead_seq = struct.unpack('{}H'.format(4 * num_cols), compress_data[: 8 * num_cols])
+        # type uint8
+        uint8_seq = struct.unpack('{}B'.format(num_rows * num_cols), compress_data[8 * num_cols: ])
+        for i in range(num_cols):
+            pchead = uint16_to_floats(min_value, prange, phead_seq[i * 4: i * 4 + 4])
+            for j in range(num_rows):
+                mat[j, i] = uint8_to_float(uint8_seq[i * num_rows + j], pchead)
+    elif cps_type == 'CM2':
+        inc = float(prange * (1.0 / 65535.0))
+        uint16_seq = struct.unpack('{}H'.format(num_rows * num_cols), compress_data)
+        for i in range(num_rows):
+            for j in range(num_cols):
+                mat[i, j] = float(min_value + uint16_seq[i * num_rows + j] * inc)
+    else:
+        inc = float(prange * (1.0 / 255.0))
+        uint8_seq = struct.unpack('{}B'.format(num_rows * num_cols), compress_data)
+        for i in range(num_rows):
+            for j in range(num_cols):
+                mat[i, j] = float(min_value + uint8_seq[i * num_rows + j] * inc)
+
+    return mat
+
 def read_compress_mat(fd):
     """ reference to function Read in CompressMatrix
     waiting for implement uncompress operation
     """
-    mat_type = read_token(fd)
-    print '\tFollowing matrix type: {}'.format(mat_type)
+    cps_type = read_token(fd)
+    print '\tFollowing matrix type: {}'.format(cps_type)
     head = struct.unpack('ffii', fd.read(16))
     print '\tCompress matrix header: ', head
-    if mat_type == 'CM':
-        remain_size = head[3] * (8 + head[2])
-    elif mat_type == 'CM2':
-        remain_size = 2 * head[2] * head[3]
-    elif mat_type == 'CM3':
-        remain_size = head[2] + head[3]
+    # 8: sizeof PerColHeader
+    # head: {min_value, range, num_rows, num_cols}
+    num_rows, num_cols = head[2], head[3]
+    if cps_type == 'CM':
+        remain_size = num_cols * (8 + num_rows)
+    elif cps_type == 'CM2':
+        remain_size = 2 * num_rows * num_cols
+    elif cps_type == 'CM3':
+        remain_size = num_rows * num_cols
     else: 
-        throw_on_error(false, 'Unknown matrix type: {}'.format(mat_type))
-    cpdata = fd.read(remain_size)
-    uncompress_data(cpdata)
+        throw_on_error(false, 'Unknown matrix compressing type: {}'.format(cps_type))
+    # now uncompress it
+    compress_data = fd.read(remain_size)
+    print uncompress(compress_data, cps_type, head)
+
 
 def read_general_mat(fd):
     """ reference to function Read in class GeneralMatrix
