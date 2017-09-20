@@ -2,9 +2,20 @@
 # coding=utf-8
 # wujian@17.9.19
 
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import struct
 import numpy as np
 
+debug = False
+
+
+def print_info(info):
+    if debug:
+        print(info)
 
 def throw_on_error(ok, info=''):
     if not ok:
@@ -50,6 +61,15 @@ def expect_token(fd, ref):
     token = read_token(fd)
     throw_on_error(token == ref, 'Expect token \'{}\', but gets {}'.format(ref, token))
 
+def read_key(fd):
+    """ read the binary flags following the key
+        key might be None
+    """
+    key = read_token(fd)
+    if key: 
+        expect_binary(fd)
+    return key
+
 def read_int32(fd):
     """ read a value in type 'int32' in kaldi setup
     """
@@ -70,6 +90,7 @@ def read_float32(fd):
 
 def read_index_tuple(fd):
     """ read the member in struct Index in nnet3/nnet-common.h  
+        return a tuple (n, t, x)
     """
     n = read_int32(fd)
     t = read_int32(fd)
@@ -77,10 +98,11 @@ def read_index_tuple(fd):
     return (n, t, x)
 
 def read_index(fd, index, cur_set):
-    """ read struct Index
-        see:
+    """ wapper to handle struct Index reading task
+        see: nnet3/nnet-common.cc
         static void ReadIndexVectorElementBinary(std::istream &is, 
             int32 i, std::vector<Index> *vec)
+        return a tuple(n, t, x)
     """
     c = struct.unpack('b', fd.read(1))[0]
     if index == 0:
@@ -101,11 +123,12 @@ def read_index(fd, index, cur_set):
 
 
 def read_index_vec(fd):
-    """ read several Index and return as a list
+    """ read several Index and return as a list of index:
+        [(n_1, t_1, x_1), ..., (n_m, t_m, x_m)]
     """
     expect_token(fd, '<I1V>')
     size = read_int32(fd)
-    print '\tSize of index vector: {}'.format(size)
+    print_info('\tSize of index vector: {}'.format(size))
     index = []
     for i in range(size):
         cur_index = read_index(fd, i, index)
@@ -114,16 +137,33 @@ def read_index_vec(fd):
 
 
 def read_common_mat(fd):
-    pass
+    """ read common matrix(for class Matrix in kaldi setup), see
+        void Matrix<Real>::Read(std::istream & is, bool binary, bool add)
+        in matrix/kaldi-matrix.cc
+        return a numpy ndarray object
+    """
+    mat_type = read_token(fd)
+    print_info('\tType of the common matrix:{}'.format(mat_type))
+    float_size = 4 if mat_type == 'FM' else 8
+    float_type = np.float32 if mat_type == 'FM' else np.float64
+    num_rows = read_int32(fd)
+    num_cols = read_int32(fd)
+    print_info('\tSize of the common matrix: {} x {}'.format(num_rows, num_cols))
+    mat_data = fd.read(float_size * num_cols * num_rows)
+    mat = np.fromstring(mat_data, dtype=float_type)
+    mat.reshape(num_rows, num_cols)
+    return mat
 
 
 def read_sparse_vec(fd):
     """ reference to function Read in SparseVector
+        return a list of key-value pair:
+        [(I1, V1), ..., (In, Vn)]
     """
     expect_token(fd, 'SV')
     dim = read_int32(fd)
     num_elems = read_int32(fd)
-    print '\tRead sparse vector(dim = {}, row = {})'.format(dim, num_elems)
+    print_info('\tRead sparse vector(dim = {}, row = {})'.format(dim, num_elems))
     sparse_vec = []
     for i in range(num_elems):
         index = read_int32(fd)
@@ -133,18 +173,18 @@ def read_sparse_vec(fd):
 
 def read_sparse_mat(fd):
     """ reference to function Read in SparseMatrix
+        A sparse matrix contains couples of sparse vector
     """
     mat_type = read_token(fd)
-    print '\tFollowing matrix type: {}'.format(mat_type)
+    print_info('\tFollowing matrix type: {}'.format(mat_type))
     num_rows = read_int32(fd)
     sparse_mat = []
     for i in range(num_rows):
         sparse_mat.append(read_sparse_vec(fd))
-    print sparse_mat
     return sparse_mat 
 
 def uint16_to_floats(min_value, prange, pchead):
-    """
+    """ uncompress type unsigned int16
     see matrix/compressed-matrix.cc
     inline float CompressedMatrix::Uint16ToFloat(
         const GlobalHeader &global_header, uint16 value)
@@ -155,7 +195,7 @@ def uint16_to_floats(min_value, prange, pchead):
     return p
 
 def uint8_to_float(char, pchead):
-    """
+    """ uncompress unsigned int8
     see matrix/compressed-matrix.cc
     inline float CompressedMatrix::CharToFloat(
         float p0, float p25, float p75, float p100, uint8 value)
@@ -168,9 +208,6 @@ def uint8_to_float(char, pchead):
         return float(pchead[2] + (pchead[3] - pchead[2]) * (char - 192) * (1 / 63.0))
 
 def uncompress(compress_data, cps_type, head):
-    min_value, prange, num_rows, num_cols = head
-    mat = np.zeros([num_rows, num_cols])
-    print '\tUncompress to matrix {} X {}'.format(num_rows, num_cols)
     """ In format CM(kOneByteWithColHeaders):
         PerColHeader, ...(x C), ... uint8 sequence ...
             first: get each PerColHeader pch for a single column
@@ -181,6 +218,9 @@ def uncompress(compress_data, cps_type, head):
         In format CM3(kOneByte):
         ...uint8 sequence...
     """
+    min_value, prange, num_rows, num_cols = head
+    mat = np.zeros([num_rows, num_cols])
+    print_info('\tUncompress to matrix {} X {}'.format(num_rows, num_cols))
     if cps_type == 'CM':
         # checking compressed data size, 8 is the sizeof PerColHeader
         assert len(compress_data) == num_cols * (8 + num_rows)
@@ -209,12 +249,12 @@ def uncompress(compress_data, cps_type, head):
 
 def read_compress_mat(fd):
     """ reference to function Read in CompressMatrix
-    waiting for implement uncompress operation
+        return a numpy ndarray object
     """
     cps_type = read_token(fd)
-    print '\tFollowing matrix type: {}'.format(cps_type)
+    print_info('\tFollowing matrix type: {}'.format(cps_type))
     head = struct.unpack('ffii', fd.read(16))
-    print '\tCompress matrix header: ', head
+    print_info('\tCompress matrix header: {}'.format(head))
     # 8: sizeof PerColHeader
     # head: {min_value, range, num_rows, num_cols}
     num_rows, num_cols = head[2], head[3]
@@ -228,49 +268,103 @@ def read_compress_mat(fd):
         throw_on_error(false, 'Unknown matrix compressing type: {}'.format(cps_type))
     # now uncompress it
     compress_data = fd.read(remain_size)
-    print uncompress(compress_data, cps_type, head)
+    mat = uncompress(compress_data, cps_type, head)
+    return mat
 
 
 def read_general_mat(fd):
     """ reference to function Read in class GeneralMatrix
+        return compress_mat/sparse_mat/common_mat
     """
     peek_mat_type = peek_char(fd)
     if peek_mat_type == 'C':
-        read_compress_mat(fd)
+        return read_compress_mat(fd)
     elif peek_mat_type == 'S':
-        read_sparse_mat(fd)
+        return read_sparse_mat(fd)
     else:
-        read_common_mat(fd)
+        return read_common_mat(fd)
 
 def read_nnet_io(fd):
     """ reference to function Read in class NnetIo
+        each NnetIo contains three member: string, Index, GeneralMatrix
+        we store them in the dict:{'name': ..., 'index': ..., 'matrix': ...}
     """
     expect_token(fd, '<NnetIo>')
-    print '\tName: {}'.format(read_token(fd))
-    print read_index_vec(fd)
-    read_general_mat(fd)
+    nnet_io = {}
+
+    name = read_token(fd)
+    nnet_io['name'] = name
+    print_info('\tName of NnetIo: {}'.format(name))
+
+    index = read_index_vec(fd)
+    nnet_io['index'] = index
+    print_info(index)
+
+    mat = read_general_mat(fd)
+    nnet_io['matrix'] = mat
+    print_info(mat)
     expect_token(fd, '</NnetIo>')
+    return nnet_io
 
 def read_nnet3eg(fd):
     """ reference to function Read in class NnetExample
+        return a list of dict, each dict represent a NnetIo object
+        a NnetExample contains several NnetIo
     """
-    expect_binary(fd)
     expect_token(fd, '<Nnet3Eg>')
     expect_token(fd, '<NumIo>')
+    # num of the NnetIo
     num_io = read_int32(fd)
+    egs = []
     for i in range(num_io):
-        read_nnet_io(fd)
+        egs.append(read_nnet_io(fd))
     expect_token(fd, '</Nnet3Eg>')
+    return egs
 
+def read_ark(fd):
+    """ usage:
+    for key, mat in read_ark(ark):
+        print(key)
+        ...
+    """
+    while True:
+        key = read_key(fd)
+        if not key:
+            break
+        mat = read_common_mat(fd)
+        yield key, mat
 
-def test():
+def read_egs(fd):
+    """ usage:
+    for key, eg in read_egs(ark):
+        print(key)
+        ...
+    """
+    while True:
+        key = read_key(fd)
+        if not key:
+            break
+        eg = read_nnet3eg(fd)
+        yield key, eg
+
+def _test_egs():
     with open('10.egs', 'rb') as egs:
         while True:
-            key = read_token(egs)
+            key = read_key(egs)
             if not key:
                 break
-            print 'Egs key: {}'.format(key)
-            read_nnet3eg(egs)
+            print('Egs key: {}'.format(key))
+            print(read_nnet3eg(egs))
+
+def _test_ark():
+    with open('10.ark', 'rb') as ark:
+        while True:
+            key = read_key(ark)
+            if not key:
+                break
+            print('Ark key: {}'.format(key))
+            print(read_common_mat(ark))
 
 if __name__ == '__main__':
-    test()
+    _test_ark()
+    _test_egs()
