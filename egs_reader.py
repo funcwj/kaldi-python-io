@@ -43,6 +43,9 @@ def expect_binary(fd):
     flags = fd.read(2)
     throw_on_error(flags == '\0B', 'Expect binary flags \'B\', but gets {}'.format(flags))
 
+def write_binary_symbol(fd):
+    fd.write('\0B')
+
 def read_token(fd):
     """ read {token + ' '} from the file
     this function also consume the space
@@ -54,6 +57,10 @@ def read_token(fd):
             break
         key += c
     return None if key == '' else key.strip()
+
+def write_token(fd, token):
+    fd.write(token)
+    fd.write(' ')
 
 def expect_token(fd, ref):
     """ check weather the token read equals to the reference
@@ -70,20 +77,30 @@ def read_key(fd):
         expect_binary(fd)
     return key
 
+def write_key(fd, key):
+    write_token(fd, key)
+    write_binary_symbol(fd)
+    
+
 def read_int32(fd):
     """ read a value in type 'int32' in kaldi setup
     """
     int_size = fd.read(1)
-    throw_on_error(int_size == '\4')
+    throw_on_error(int_size == '\04')
     int_str = fd.read(4)
     int_val = struct.unpack('i', int_str)
     return int_val[0]
+
+def write_int32(fd, int32):
+    fd.write('\04')
+    int_pack = struct.pack('i', int32)
+    fd.write(int_pack)
 
 def read_float32(fd):
     """ read a value in type 'BaseFloat' in kaldi setup
     """
     float_size = fd.read(1)
-    throw_on_error(float_size == '\4')
+    throw_on_error(float_size == '\04')
     float_str = fd.read(4)
     float_val = struct.unpack('f', float_str)
     return float_val
@@ -151,9 +168,25 @@ def read_common_mat(fd):
     print_info('\tSize of the common matrix: {} x {}'.format(num_rows, num_cols))
     mat_data = fd.read(float_size * num_cols * num_rows)
     mat = np.fromstring(mat_data, dtype=float_type)
-    mat.reshape(num_rows, num_cols)
-    return mat
+    return mat.reshape(num_rows, num_cols)
 
+def write_common_mat(fd, mat):
+    assert mat.dtype == np.float32 or mat.dtype == np.float64
+    mat_type = 'FM' if mat.dtype == np.float32 else 'DM'
+    write_token(fd, mat_type)
+    num_rows, num_cols = mat.shape
+    write_int32(fd, num_rows)
+    write_int32(fd, num_cols)
+    mat.tofile(fd, sep='')
+
+
+def read_common_int_vec(fd):
+    vec_size = read_int32(fd)
+    vec = np.zeros(vec_size, dtype=int)
+    for i in range(vec_size):
+        value = read_int32(fd)
+        vec[i] = value
+    return vec
 
 def read_sparse_vec(fd):
     """ reference to function Read in SparseVector
@@ -347,6 +380,20 @@ def read_egs(fd):
         eg = read_nnet3eg(fd)
         yield key, eg
 
+def read_ali(fd):
+    while True:
+        key = read_key(fd)
+        if not key:
+            break
+        ali = read_common_int_vec(fd)
+        yield key, ali
+
+# -----------------test part-------------------
+def _test_ali():
+    with open('10.ali', 'rb') as fd:
+        for key, vec in read_ali(fd):
+            print(key)
+
 def _test_egs():
     with open('10.egs', 'rb') as egs:
         while True:
@@ -356,15 +403,19 @@ def _test_egs():
             print('Egs key: {}'.format(key))
             print(read_nnet3eg(egs))
 
-def _test_ark():
-    with open('10.ark', 'rb') as ark:
-        while True:
-            key = read_key(ark)
-            if not key:
-                break
-            print('Ark key: {}'.format(key))
-            print(read_common_mat(ark))
+def _test_write_ark():
+    with open('10.ark', 'rb') as ark, open('10.ark.new', 'wb') as dst:
+        for key, mat in read_ark(ark):
+            write_key(dst, key)
+            write_common_mat(dst, mat)
+
+def _test_read_ark():
+    with open('10.ark.new', 'rb') as ark:
+        for key, mat in read_ark(ark):
+            print(key)
 
 if __name__ == '__main__':
-    _test_ark()
-    _test_egs()
+    _test_write_ark()
+    _test_read_ark()
+    # _test_egs()
+    # _test_ali()
