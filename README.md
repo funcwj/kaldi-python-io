@@ -1,32 +1,28 @@
-## egs-reader-for-kaldi
+## kaldi IO
 
-A python interface to read egs format data in kaldi nnet3 setup
-
-### TODO
-- [x] Implement uncompress function for CompressMatrix
-- [x] Support common Matrix
-- [ ] Further debug
+A python wrapper for kaldi's data accessing.
 
 ### Support Type
-* kaldi binary archieves(*.ark)
+
+* kaldi's binary archieves(*.ark)
+* kaldi's scripts (alignments & features, *.scp)
 * kaldi nnet3 data examples in binary(*.egs)
 
 ### Usage
 
-for binary *.egs:
-```python
-with open('10.egs', 'rb') as egs:
-    while True:
-        key = read_key(egs)
-        if not key:
-            break
-        print('Egs key: {}'.format(key))
-        print(read_nnet3eg(egs))
+* ScpReader
 ```
-or 
-```python
-for key, eg in read_egs(ark):
+scp_reader = ScpReader('data/dev_feats.scp')
+for key, ark in scp_reader:
+    print(ark.shape)
+    assert key in scp_reader
+```
+
+* ArkReader
+```
+ark_reader = ArkReader('../data/pdf.*.ark', model='pdfid')
+for key, vec in ark_reader:
     print(key)
-    # ...
 ```
-binary *.ark is similar to egs reading
+
+more to see `_test_*` function in `iobase.py`, `reader.py`

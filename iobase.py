@@ -2,16 +2,15 @@
 # coding=utf-8
 # wujian@17.9.19
 
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+"""
+    Kaldi IO function implement(for binary format), test pass in Python 3.6.0
+"""
 
 import struct
+import logging
 import numpy as np
 
 debug = False
-
 
 def print_info(info):
     if debug:
@@ -26,6 +25,8 @@ def peek_char(fd):
     """
     peek_c = fd.read(1)
     fd.seek(-1, 1)
+    if type(peek_c) == bytes:
+        peek_c = bytes.decode(peek_c)
     return peek_c 
 
 def expect_space(fd):
@@ -33,6 +34,8 @@ def expect_space(fd):
     we need to consume it
     """
     space = fd.read(1)
+    if type(space) == bytes:
+        space = bytes.decode(space)
     throw_on_error(space == ' ', 'Expect space, but gets {}'.format(space))
 
 
@@ -41,10 +44,14 @@ def expect_binary(fd):
     support reading egs in binary format
     """
     flags = fd.read(2)
-    throw_on_error(flags == '\0B', 'Expect binary flags \'B\', but gets {}'.format(flags))
+    if type(flags) == bytes:
+        flags = bytes.decode(flags)
+    # throw_on_error(flags == '\0B', 'Expect binary flags \'B\', but gets {}'.format(flags))
+    throw_on_error(flags == '\0B', 'Expect binary flags \'\\0B\', but gets {}'.format(flags))
 
 def write_binary_symbol(fd):
-    fd.write('\0B')
+    fd.write(str.encode('\0B'))
+    # fd.write(b'\x00B')
 
 def read_token(fd):
     """ read {token + ' '} from the file
@@ -53,14 +60,18 @@ def read_token(fd):
     key = ''
     while True:
         c = fd.read(1)
+        if type(c) == bytes:
+            c = bytes.decode(c)
         if c == ' ' or c == '':
             break
         key += c
     return None if key == '' else key.strip()
 
 def write_token(fd, token):
+    if type(token) == str:
+        token = str.encode(token)
     fd.write(token)
-    fd.write(' ')
+    fd.write(str.encode(' '))
 
 def expect_token(fd, ref):
     """ check weather the token read equals to the reference
@@ -86,13 +97,15 @@ def read_int32(fd):
     """ read a value in type 'int32' in kaldi setup
     """
     int_size = fd.read(1)
-    throw_on_error(int_size == '\04')
+    if type(int_size) == bytes:
+        int_size = bytes.decode(int_size)
+    throw_on_error(int_size == '\04', 'Expect \'\\04\', but gets {}'.format(int_size))
     int_str = fd.read(4)
     int_val = struct.unpack('i', int_str)
     return int_val[0]
 
 def write_int32(fd, int32):
-    fd.write('\04')
+    fd.write(str.encode('\04'))
     int_pack = struct.pack('i', int32)
     fd.write(int_pack)
 
@@ -100,57 +113,13 @@ def read_float32(fd):
     """ read a value in type 'BaseFloat' in kaldi setup
     """
     float_size = fd.read(1)
-    throw_on_error(float_size == '\04')
+    # throw_on_error(float_size == '\04')
+    if type(float_size) == bytes:
+        float_size = bytes.decode(float_size)
+    throw_on_error(float_size == '\04', 'Expect \'\\04\', but gets {}'.format(float_size))
     float_str = fd.read(4)
     float_val = struct.unpack('f', float_str)
     return float_val
-
-def read_index_tuple(fd):
-    """ read the member in struct Index in nnet3/nnet-common.h  
-        return a tuple (n, t, x)
-    """
-    n = read_int32(fd)
-    t = read_int32(fd)
-    x = read_int32(fd)
-    return (n, t, x)
-
-def read_index(fd, index, cur_set):
-    """ wapper to handle struct Index reading task
-        see: nnet3/nnet-common.cc
-        static void ReadIndexVectorElementBinary(std::istream &is, 
-            int32 i, std::vector<Index> *vec)
-        return a tuple(n, t, x)
-    """
-    c = struct.unpack('b', fd.read(1))[0]
-    if index == 0:
-        if abs(c) < 125:
-            return (0, c, 0)
-        else:
-            if c != 127:
-               throw_on_error(false, 'Unexpected character {} encountered while reading Index vector.'.format(c))
-            return read_index_tuple(fd)
-    else:
-        prev_index = cur_set[index - 1]
-        if abs(c) < 125:
-            return (prev_index[0], prev_index[1] + c, prev_index[2])
-        else:
-            if c != 127:
-               throw_on_error(false, 'Unexpected character {} encountered while reading Index vector.'.format(c))
-            return read_index_tuple(fd)
-
-
-def read_index_vec(fd):
-    """ read several Index and return as a list of index:
-        [(n_1, t_1, x_1), ..., (n_m, t_m, x_m)]
-    """
-    expect_token(fd, '<I1V>')
-    size = read_int32(fd)
-    print_info('\tSize of index vector: {}'.format(size))
-    index = []
-    for i in range(size):
-        cur_index = read_index(fd, i, index)
-        index.append(cur_index)
-    return index
 
 
 def read_common_mat(fd):
@@ -160,7 +129,7 @@ def read_common_mat(fd):
         return a numpy ndarray object
     """
     mat_type = read_token(fd)
-    print_info('\tType of the common matrix:{}'.format(mat_type))
+    print_info('\tType of the common matrix: {}'.format(mat_type))
     float_size = 4 if mat_type == 'FM' else 8
     float_type = np.float32 if mat_type == 'FM' else np.float64
     num_rows = read_int32(fd)
@@ -177,10 +146,13 @@ def write_common_mat(fd, mat):
     num_rows, num_cols = mat.shape
     write_int32(fd, num_rows)
     write_int32(fd, num_cols)
-    mat.tofile(fd, sep='')
+    fd.write(mat.tobytes())
+    # mat.tofile(fd, sep='')
 
 
-def read_common_int_vec(fd):
+def read_common_int_vec(fd, direct_access=False):
+    if direct_access:
+        expect_binary(fd)
     vec_size = read_int32(fd)
     vec = np.zeros(vec_size, dtype=int)
     for i in range(vec_size):
@@ -305,10 +277,12 @@ def read_compress_mat(fd):
     return mat
 
 
-def read_general_mat(fd):
+def read_general_mat(fd, direct_access=False):
     """ reference to function Read in class GeneralMatrix
         return compress_mat/sparse_mat/common_mat
     """
+    if direct_access:
+        expect_binary(fd)
     peek_mat_type = peek_char(fd)
     if peek_mat_type == 'C':
         return read_compress_mat(fd)
@@ -316,43 +290,6 @@ def read_general_mat(fd):
         return read_sparse_mat(fd)
     else:
         return read_common_mat(fd)
-
-def read_nnet_io(fd):
-    """ reference to function Read in class NnetIo
-        each NnetIo contains three member: string, Index, GeneralMatrix
-        we store them in the dict:{'name': ..., 'index': ..., 'matrix': ...}
-    """
-    expect_token(fd, '<NnetIo>')
-    nnet_io = {}
-
-    name = read_token(fd)
-    nnet_io['name'] = name
-    print_info('\tName of NnetIo: {}'.format(name))
-
-    index = read_index_vec(fd)
-    nnet_io['index'] = index
-    print_info(index)
-
-    mat = read_general_mat(fd)
-    nnet_io['matrix'] = mat
-    print_info(mat)
-    expect_token(fd, '</NnetIo>')
-    return nnet_io
-
-def read_nnet3eg(fd):
-    """ reference to function Read in class NnetExample
-        return a list of dict, each dict represent a NnetIo object
-        a NnetExample contains several NnetIo
-    """
-    expect_token(fd, '<Nnet3Eg>')
-    expect_token(fd, '<NumIo>')
-    # num of the NnetIo
-    num_io = read_int32(fd)
-    egs = []
-    for i in range(num_io):
-        egs.append(read_nnet_io(fd))
-    expect_token(fd, '</Nnet3Eg>')
-    return egs
 
 def read_ark(fd):
     """ usage:
@@ -364,21 +301,8 @@ def read_ark(fd):
         key = read_key(fd)
         if not key:
             break
-        mat = read_common_mat(fd)
+        mat = read_general_mat(fd)
         yield key, mat
-
-def read_egs(fd):
-    """ usage:
-    for key, eg in read_egs(ark):
-        print(key)
-        ...
-    """
-    while True:
-        key = read_key(fd)
-        if not key:
-            break
-        eg = read_nnet3eg(fd)
-        yield key, eg
 
 def read_ali(fd):
     while True:
@@ -390,18 +314,10 @@ def read_ali(fd):
 
 # -----------------test part-------------------
 def _test_ali():
-    with open('10.ali', 'rb') as fd:
+    with open('pdf/pdf.1.ark', 'rb') as fd:
         for key, vec in read_ali(fd):
             print(key)
 
-def _test_egs():
-    with open('10.egs', 'rb') as egs:
-        while True:
-            key = read_key(egs)
-            if not key:
-                break
-            print('Egs key: {}'.format(key))
-            print(read_nnet3eg(egs))
 
 def _test_write_ark():
     with open('10.ark', 'rb') as ark, open('10.ark.new', 'wb') as dst:
@@ -412,10 +328,9 @@ def _test_write_ark():
 def _test_read_ark():
     with open('10.ark.new', 'rb') as ark:
         for key, mat in read_ark(ark):
-            print(key)
+            print(mat.shape)
 
 if __name__ == '__main__':
     _test_write_ark()
     _test_read_ark()
-    # _test_egs()
     # _test_ali()
