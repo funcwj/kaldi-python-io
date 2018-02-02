@@ -11,7 +11,7 @@ A python wrapper for kaldi's data accessing.
 ### Usage
 
 * ScpReader
-```
+```python
 scp_reader = ScpReader('data/dev_feats.scp')
 for key, ark in scp_reader:
     print(ark.shape)
@@ -19,7 +19,7 @@ for key, ark in scp_reader:
 ```
 
 * ArkReader
-```
+```python
 ark_reader = ArkReader('../data/pdf.*.ark', model='pdfid')
 for key, vec in ark_reader:
     print(key)
