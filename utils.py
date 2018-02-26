@@ -2,6 +2,7 @@
 # coding=utf-8
 
 import logging
+import numpy as np
 
 logfmt  = "%(filename)s[%(lineno)d] %(asctime)s %(levelname)s: %(message)s"
 datefmt = "%Y-%m-%d %T"
@@ -36,4 +37,12 @@ def parse_utt2spk(utt2spk_path):
         utt2spk_dict[utt_id] = spk_id
     return utt2spk_dict
         
+def apply_mvn(feats_mat, norm_means=True, norm_vars=True):
+    mean = np.mean(feats_mat, axis=0)
+    std  = np.std(feats_mat, axis=0) 
+    if norm_means:
+        feats_mat = feats_mat - mean
+    if norm_vars:
+        feats_mat = feats_mat / std
+    return feats_mat
 
