@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # coding=utf-8
 # wujian@17.12.30
+"""
+    A Simple wrapper for iobase.py, may be rewritten in the future
+"""
 
 import os
 import glob
@@ -13,20 +16,23 @@ from kaldi_pyio.utils import parse_scps, apply_mvn
 # import iobase as io
 # from utils import parse_scps
 
-logfmt  = "%(filename)s[%(lineno)d] %(asctime)s %(levelname)s: %(message)s"
+logfmt = "%(filename)s[%(lineno)d] %(asctime)s %(levelname)s: %(message)s"
 datefmt = "%Y-%m-%d %T"
 logging.basicConfig(level=logging.INFO, format=logfmt, datefmt=datefmt)
+
 
 class ScpReader(object):
     def __init__(self, scp_path, model='feature'):
         assert model in ['feature', 'pdfid']
-        assert os.path.exists(scp_path), '{} do not exists, please check!'.format(scp_path)
-        self.scp_dict = parse_scps(scp_path) 
+        assert os.path.exists(
+            scp_path), '{} do not exists, please check!'.format(scp_path)
+        self.scp_dict = parse_scps(scp_path)
         self.io_func = io.read_general_mat if model == 'feature' else io.read_common_int_vec
         self.iter_keys = self.keys()
-        self.scp_path  = scp_path
-        self.str = '{}: {}({})'.format(self.__class__.__name__, scp_path, model)
-        
+        self.scp_path = scp_path
+        self.str = '{}: {}({})'.format(self.__class__.__name__, scp_path,
+                                       model)
+
     def __len__(self):
         return len(self.scp_dict)
 
@@ -54,18 +60,18 @@ class ScpReader(object):
     # used for direct access like 'scp_reader[key]'
     def __getitem__(self, key):
         ark = self._load_ark(key)
-        return ark 
+        return ark
 
     # used for judge 'assert key in scp_reader'
     def __contains__(self, key):
         return key in self.scp_dict
-    
+
 
 class NormScpReader(ScpReader):
     def __init__(self, scp_path, norm_means=True, norm_vars=True):
         super().__init__(scp_path, model='feature')
         self.norm_means = norm_means
-        self.norm_vars  = norm_vars
+        self.norm_vars = norm_vars
 
     def __iter__(self):
         for key, feats in super().__iter__():
@@ -75,12 +81,15 @@ class NormScpReader(ScpReader):
         ark = self._load_ark(key)
         return apply_mvn(ark, self.norm_means, self.norm_vars)
 
+
 class ArkReader(object):
     def __init__(self, ark_dirp, model='feature'):
         assert model in ['feature', 'pdfid']
         self.io_func = io.read_general_mat if model == 'feature' else io.read_common_int_vec
-        self.ark_list = [ark_dirp] if os.path.isfile(ark_dirp) else glob.glob(ark_dirp)
-        self.str = '{}: {}({})'.format(self.__class__.__name__, ark_dirp, model)
+        self.ark_list = [ark_dirp
+                         ] if os.path.isfile(ark_dirp) else glob.glob(ark_dirp)
+        self.str = '{}: {}({})'.format(self.__class__.__name__, ark_dirp,
+                                       model)
 
     # return nums of arks
     def __len__(self):
@@ -115,9 +124,9 @@ class DataReader(object):
         # self.feats_reader = ScpReader(feats_scp, model='feature')
         # self.pdfs_reader  = ScpReader(pdfs_scp, model='pdfid')
         self.feats_reader = feats_reader
-        self.pdfs_reader  = pdfs_reader
-        self.time_delay   = time_delay
-        self.iter_keys    = self._keys(sort)
+        self.pdfs_reader = pdfs_reader
+        self.time_delay = time_delay
+        self.iter_keys = self._keys(sort)
         assert time_delay >= 0
 
     def _process_utt(self, feats_mat, pdfs_vec):
@@ -140,7 +149,7 @@ class DataReader(object):
         # shuffle feature reader
         self.feats_reader.shuffle()
 
-    def __iter__(self): 
+    def __iter__(self):
         num_miss_trans = processed = 0
         tot_frames = 0
         for key in self.iter_keys:
@@ -157,8 +166,11 @@ class DataReader(object):
             feat, pdf = self._process_utt(feat, pdf)
             yield key, feat, pdf
         if num_miss_trans:
-            logging.warn('{} utterances missing targets'.format(num_miss_trans))
-        logging.info('Processed {} utterances({} frames) in total'.format(processed, tot_frames))
+            logging.warn(
+                '{} utterances missing targets'.format(num_miss_trans))
+        logging.info('Processed {} utterances({} frames) in total'.format(
+            processed, tot_frames))
+
 
 def _test_scp_reader():
     scp_reader = ScpReader('data/dev_feats.scp', model='feature')
@@ -172,13 +184,15 @@ def _test_scp_reader():
         print(ark.shape)
         assert key in scp_reader
 
+
 def _test_data_reader():
-    data_reader = DataReader('../data/dev_feats.scp', '../data/dev_pdfs.scp', sort=True)
+    data_reader = DataReader(
+        '../data/dev_feats.scp', '../data/dev_pdfs.scp', sort=True)
     for key, feat, pdf in data_reader:
         print(feat.shape)
+
 
 if __name__ == '__main__':
     # _test_scp_reader()
     # _test_ark_reader()
     _test_data_reader()
-    
