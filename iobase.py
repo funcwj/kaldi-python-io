@@ -6,7 +6,6 @@
 """
 
 import struct
-import logging
 import numpy as np
 
 debug = False
@@ -23,7 +22,8 @@ def throw_on_error(ok, info=''):
 
 
 def peek_char(fd):
-    """ read a char and seek the point back
+    """ 
+        Read a char and seek the point back
     """
     peek_c = fd.read(1)
     fd.seek(-1, 1)
@@ -33,8 +33,8 @@ def peek_char(fd):
 
 
 def expect_space(fd):
-    """ generally, there is a space following the string token
-    we need to consume it
+    """ 
+        Generally, there is a space following the string token, we need to consume it
     """
     space = fd.read(1)
     if type(space) == bytes:
@@ -43,8 +43,8 @@ def expect_space(fd):
 
 
 def expect_binary(fd):
-    """ read the binary flags in kaldi, the scripts only
-    support reading egs in binary format
+    """ 
+        Read the binary flags in kaldi, the scripts only support reading egs in binary format
     """
     flags = fd.read(2)
     if type(flags) == bytes:
@@ -54,14 +54,9 @@ def expect_binary(fd):
                    'Expect binary flags \'\\0B\', but gets {}'.format(flags))
 
 
-# def write_binary_symbol(fd):
-#     fd.write(str.encode('\0B'))
-#     # fd.write(b'\x00B')
-
-
 def read_token(fd):
-    """ read {token + ' '} from the file
-    this function also consume the space
+    """ 
+        Read {token + ' '} from the file(this function also consume the space)
     """
     key = ''
     while True:
@@ -75,6 +70,9 @@ def read_token(fd):
 
 
 def write_token(fd, token):
+    """
+        Write a string token, following a space symbol
+    """
     if type(token) == str:
         token = str.encode(token)
     fd.write(token)
@@ -82,7 +80,8 @@ def write_token(fd, token):
 
 
 def expect_token(fd, ref):
-    """ check weather the token read equals to the reference
+    """ 
+        Check weather the token read equals to the reference
     """
     token = read_token(fd)
     throw_on_error(token == ref, 'Expect token \'{}\', but gets {}'.format(
@@ -90,8 +89,8 @@ def expect_token(fd, ref):
 
 
 def read_key(fd):
-    """ read the binary flags following the key
-        key might be None
+    """ 
+        Read the binary flags following the key(key might be None)
     """
     key = read_token(fd)
     if key:
@@ -99,17 +98,16 @@ def read_key(fd):
     return key
 
 
-def write_key(fd, key):
-    """ write key, following a binary symbol
+def write_binary_symbol(fd):
+    """ 
+        Write a binary symbol
     """
-    write_token(fd, key)
-    # write binary symbol
     fd.write(str.encode('\0B'))
-    # write_binary_symbol(fd)
 
 
 def read_int32(fd):
-    """ read a value in type 'int32' in kaldi setup
+    """ 
+        Read a value in type 'int32' in kaldi setup
     """
     int_size = fd.read(1)
     if type(int_size) == bytes:
@@ -122,13 +120,17 @@ def read_int32(fd):
 
 
 def write_int32(fd, int32):
+    """
+        Write a int32 number
+    """
     fd.write(str.encode('\04'))
     int_pack = struct.pack('i', int32)
     fd.write(int_pack)
 
 
 def read_float32(fd):
-    """ read a value in type 'BaseFloat' in kaldi setup
+    """ 
+        Read a value in type 'BaseFloat' in kaldi setup
     """
     float_size = fd.read(1)
     # throw_on_error(float_size == '\04')
@@ -142,10 +144,11 @@ def read_float32(fd):
 
 
 def read_common_mat(fd):
-    """ read common matrix(for class Matrix in kaldi setup), see
-        void Matrix<Real>::Read(std::istream & is, bool binary, bool add)
-        in matrix/kaldi-matrix.cc
-        return a numpy ndarray object
+    """ 
+        Read common matrix(for class Matrix in kaldi setup)
+        see matrix/kaldi-matrix.cc::
+            void Matrix<Real>::Read(std::istream & is, bool binary, bool add)
+        Return a numpy ndarray object
     """
     mat_type = read_token(fd)
     print_info('\tType of the common matrix: {}'.format(mat_type))
@@ -161,6 +164,9 @@ def read_common_mat(fd):
 
 
 def write_common_mat(fd, mat):
+    """
+        Write a common matrix
+    """
     assert mat.dtype == np.float32 or mat.dtype == np.float64
     mat_type = 'FM' if mat.dtype == np.float32 else 'DM'
     write_token(fd, mat_type)
@@ -168,10 +174,12 @@ def write_common_mat(fd, mat):
     write_int32(fd, num_rows)
     write_int32(fd, num_cols)
     fd.write(mat.tobytes())
-    # mat.tofile(fd, sep='')
 
 
 def read_common_int_vec(fd, direct_access=False):
+    """
+        Read int32 vector(alignments)
+    """
     if direct_access:
         expect_binary(fd)
     vec_size = read_int32(fd)
@@ -183,9 +191,10 @@ def read_common_int_vec(fd, direct_access=False):
 
 
 def read_sparse_vec(fd):
-    """ reference to function Read in SparseVector
-        return a list of key-value pair:
-        [(I1, V1), ..., (In, Vn)]
+    """ 
+        Reference to function Read in SparseVector
+        Return a list of key-value pair:
+            [(I1, V1), ..., (In, Vn)]
     """
     expect_token(fd, 'SV')
     dim = read_int32(fd)
@@ -193,7 +202,7 @@ def read_sparse_vec(fd):
     print_info('\tRead sparse vector(dim = {}, row = {})'.format(
         dim, num_elems))
     sparse_vec = []
-    for i in range(num_elems):
+    for _ in range(num_elems):
         index = read_int32(fd)
         value = read_float32(fd)
         sparse_vec.append((index, value))
@@ -201,7 +210,8 @@ def read_sparse_vec(fd):
 
 
 def read_sparse_mat(fd):
-    """ reference to function Read in SparseMatrix
+    """ 
+        Reference to function Read in SparseMatrix
         A sparse matrix contains couples of sparse vector
     """
     mat_type = read_token(fd)
@@ -214,10 +224,10 @@ def read_sparse_mat(fd):
 
 
 def uint16_to_floats(min_value, prange, pchead):
-    """ uncompress type unsigned int16
-    see matrix/compressed-matrix.cc
-    inline float CompressedMatrix::Uint16ToFloat(
-        const GlobalHeader &global_header, uint16 value)
+    """ 
+        Uncompress type unsigned int16
+        see matrix/compressed-matrix.cc:
+            inline float CompressedMatrix::Uint16ToFloat(const GlobalHeader &global_header, uint16 value)
     """
     p = []
     for value in pchead:
@@ -226,10 +236,10 @@ def uint16_to_floats(min_value, prange, pchead):
 
 
 def uint8_to_float(char, pchead):
-    """ uncompress unsigned int8
-    see matrix/compressed-matrix.cc
-    inline float CompressedMatrix::CharToFloat(
-        float p0, float p25, float p75, float p100, uint8 value)
+    """ 
+        Uncompress unsigned int8
+        see matrix/compressed-matrix.cc:
+            inline float CompressedMatrix::CharToFloat(float p0, float p25, float p75, float p100, uint8 value)
     """
     if char <= 64:
         return float(pchead[0] + (pchead[1] - pchead[0]) * char * (1 / 64.0))
@@ -242,7 +252,8 @@ def uint8_to_float(char, pchead):
 
 
 def uncompress(compress_data, cps_type, head):
-    """ In format CM(kOneByteWithColHeaders):
+    """ 
+        In format CM(kOneByteWithColHeaders):
         PerColHeader, ...(x C), ... uint8 sequence ...
             first: get each PerColHeader pch for a single column
             then : using pch to uncompress each float in the column
@@ -290,8 +301,9 @@ def uncompress(compress_data, cps_type, head):
 
 
 def read_compress_mat(fd):
-    """ reference to function Read in CompressMatrix
-        return a numpy ndarray object
+    """ 
+        Reference to function Read in CompressMatrix
+        Return a numpy ndarray object
     """
     cps_type = read_token(fd)
     print_info('\tFollowing matrix type: {}'.format(cps_type))
@@ -316,8 +328,9 @@ def read_compress_mat(fd):
 
 
 def read_general_mat(fd, direct_access=False):
-    """ reference to function Read in class GeneralMatrix
-        return compress_mat/sparse_mat/common_mat
+    """ 
+        Reference to function Read in class GeneralMatrix
+        Return compress_mat/sparse_mat/common_mat
     """
     if direct_access:
         expect_binary(fd)
@@ -331,10 +344,11 @@ def read_general_mat(fd, direct_access=False):
 
 
 def read_ark(fd):
-    """ usage:
-    for key, mat in read_ark(ark):
-        print(key)
-        ...
+    """ 
+        Usage:
+        for key, mat in read_ark(ark):
+            print(key)
+            ...
     """
     while True:
         key = read_key(fd)
@@ -363,13 +377,15 @@ def _test_ali():
 def _test_write_ark():
     with open('10.ark', 'rb') as ark, open('10.ark.new', 'wb') as dst:
         for key, mat in read_ark(ark):
-            write_key(dst, key)
+            write_token(dst, key)
+            # in binary mode
+            write_binary_symbol(dst)
             write_common_mat(dst, mat)
 
 
 def _test_read_ark():
     with open('10.ark.new', 'rb') as ark:
-        for key, mat in read_ark(ark):
+        for _, mat in read_ark(ark):
             print(mat.shape)
 
 

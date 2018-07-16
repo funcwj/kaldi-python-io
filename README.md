@@ -10,19 +10,21 @@ A python wrapper for kaldi's data accessing.
 
 ### Usage
 
-* ScpReader
-```python
-scp_reader = ScpReader('data/dev_feats.scp')
-for key, ark in scp_reader:
-    print(ark.shape)
-    assert key in scp_reader
-```
+* ArchieveReader & AlignmentReader
+    ```python
+    # allow sequential/random index
+    ark_reader = ArchieveReader("egs.scp")
+    for key, _ in ark_reader:
+        print(key)
+    ali_reader = AlignmentReader("ali.scp")
+    for key, _ in ali_reader:
+        print(key)
+    ```
 
-* ArkReader
-```python
-ark_reader = ArkReader('../data/pdf.*.ark', model='pdfid')
-for key, vec in ark_reader:
-    print(key)
-```
-
-more to see `_test_*` function in `iobase.py`, `reader.py`
+* ArchieveWriter
+    ```python
+    with ArchieveWriter("egs.ark", "egs.scp") as writer:
+        for i in range(10):
+            mat = np.random.rand(100, 20)
+            writer.write("mat-{:d}".format(i), mat)
+    ```

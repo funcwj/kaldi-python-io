@@ -1,5 +1,7 @@
 *.pyc
 *.egs
 *.ark
+*.scp
 *.txt
 .vscode/
+__pycache__/
