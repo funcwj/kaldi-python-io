@@ -2,8 +2,9 @@
 # wujian@2018
 """
     Simple wrapper for iobase.py
-    - ArchieveReader
-    - ArchieveWriter
+    - ArchiveReader
+    - ScriptReader
+    - ArchiveWriter
     - AlignmentReader
 """
 
@@ -74,7 +75,7 @@ class Reader(object):
             raise IndexError("Unsupported index type: {}".format(type(index)))
 
 
-class ArchieveReader(Reader):
+class ScriptReader(Reader):
     """
         Reader for kaldi's scripts(for BaseFloat matrix)
     """
@@ -87,7 +88,7 @@ class ArchieveReader(Reader):
             path, offset = ":".join(addr_token[0:-1]), int(addr_token[-1])
             return (path, offset)
 
-        super(ArchieveReader, self).__init__(
+        super(ScriptReader, self).__init__(
             ark_scp, addr_processor=addr_processor)
 
     def _load(self, key):
@@ -97,7 +98,6 @@ class ArchieveReader(Reader):
             io.expect_binary(f)
             ark = io.read_general_mat(f)
         return ark
-
 
 class Writer(object):
     """
@@ -122,8 +122,21 @@ class Writer(object):
     def write(self, key, value):
         raise NotImplementedError
 
+class ArchiveReader(object):
+    """
+        Sequential Reader for .ark object
+    """
+    def __init__(self, ark_path):
+        if not os.path.exists(ark_path):
+            raise FileNotFoundError("Could not find {}".format(ark_path))
+        self.ark_path = ark_path
+    
+    def __iter__(self):
+        with open(self.ark_path, "rb") as fd:
+            for key, mat in io.read_ark(fd):
+                yield key, mat
 
-class AlignmentReader(ArchieveReader):
+class AlignmentReader(ScriptReader):
     """
         Reader for kaldi's scripts(for int32 vector, such as alignments)
     """
@@ -139,14 +152,13 @@ class AlignmentReader(ArchieveReader):
             ark = io.read_common_int_vec(f)
         return ark
 
-
-class ArchieveWriter(Writer):
+class ArchiveWriter(Writer):
     """
-        Writer for kaldi's scripts && archieve(for BaseFloat matrix)
+        Writer for kaldi's archive && scripts(for BaseFloat matrix)
     """
 
     def __init__(self, ark_path, scp_path=None):
-        super(ArchieveWriter, self).__init__(ark_path, scp_path)
+        super(ArchiveWriter, self).__init__(ark_path, scp_path)
 
     def write(self, key, matrix):
         io.write_token(self.ark_file, key)
@@ -154,24 +166,24 @@ class ArchieveWriter(Writer):
         # binary symbol
         io.write_binary_symbol(self.ark_file)
         io.write_common_mat(self.ark_file, matrix)
+        abs_path = os.path.abspath(self.ark_path)
         if self.scp_file:
-            self.scp_file.write("{}\t{}:{:d}\n".format(
-                key, os.path.abspath(self.ark_path), offset))
+            self.scp_file.write("{}\t{}:{:d}\n".format(key, abs_path, offset))
 
 
-def test_archieve_writer(ark, scp):
-    with ArchieveWriter(ark, scp) as writer:
+def test_archive_writer(ark, scp):
+    with ArchiveWriter(ark, scp) as writer:
         for i in range(10):
             mat = np.random.rand(100, 20)
             writer.write("mat-{:d}".format(i), mat)
     print("TEST *test_archieve_writer* DONE!")
 
 
-def test_archieve_reader(egs):
-    ark_reader = ArchieveReader(egs)
-    for key, mat in ark_reader:
+def test_script_reader(egs):
+    scp_reader = ScriptReader(egs)
+    for key, mat in scp_reader:
         print("{}: {}".format(key, mat.shape))
-    print("TEST *test_archieve_reader* DONE!")
+    print("TEST *test_script_reader* DONE!")
 
 
 def test_alignment_reader(egs):
@@ -182,6 +194,6 @@ def test_alignment_reader(egs):
 
 
 if __name__ == "__main__":
-    test_archieve_writer("egs.ark", "egs.scp")
-    test_archieve_reader("egs.scp")
+    test_archive_writer("egs.ark", "egs.scp")
+    test_script_reader("egs.scp")
     # test_alignment_reader("egs.scp")
