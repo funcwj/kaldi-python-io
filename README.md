@@ -12,10 +12,18 @@ A python wrapper for kaldi's data accessing.
 
 * ArchiveReader
     ```python
-    # allow sequential index
+    # allow only sequential index
     ark_reader = ArchiveReader("egs.ark")
     for key, _ in ark_reader:
         print(key)
+    ```
+
+* Nnet3EgsReader
+    ```python
+    # allow only sequential index
+    egs_reader = Nnet3EgsReader(egs)
+    for key, _ in egs_reader:
+        print("{}".format(key))
     ```
 
 * ArchiveWriter

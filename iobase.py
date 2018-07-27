@@ -300,6 +300,63 @@ def uncompress(compress_data, cps_type, head):
     return mat
 
 
+def read_index_tuple(fd):
+    """ 
+        Read the member in struct Index in nnet3/nnet-common.h  
+        Return a tuple (n, t, x)
+    """
+    n = read_int32(fd)
+    t = read_int32(fd)
+    x = read_int32(fd)
+    return (n, t, x)
+
+
+def read_index(fd, index, cur_set):
+    """ 
+        Wapper to handle struct Index reading task(see: nnet3/nnet-common.cc)
+            static void ReadIndexVectorElementBinary(std::istream &is, \
+                int32 i, std::vector<Index> *vec)
+        Return a tuple(n, t, x)
+    """
+    c = struct.unpack('b', fd.read(1))[0]
+    if index == 0:
+        if abs(c) < 125:
+            return (0, c, 0)
+        else:
+            if c != 127:
+                throw_on_error(
+                    False,
+                    'Unexpected character {} encountered while reading Index vector.'.
+                    format(c))
+            return read_index_tuple(fd)
+    else:
+        prev_index = cur_set[index - 1]
+        if abs(c) < 125:
+            return (prev_index[0], prev_index[1] + c, prev_index[2])
+        else:
+            if c != 127:
+                throw_on_error(
+                    False,
+                    'Unexpected character {} encountered while reading Index vector.'.
+                    format(c))
+            return read_index_tuple(fd)
+
+
+def read_index_vec(fd):
+    """ 
+        Read several Index and return as a list of index:
+        [(n_1, t_1, x_1), ..., (n_m, t_m, x_m)]
+    """
+    expect_token(fd, '<I1V>')
+    size = read_int32(fd)
+    print_info('\tSize of index vector: {}'.format(size))
+    index = []
+    for i in range(size):
+        cur_index = read_index(fd, i, index)
+        index.append(cur_index)
+    return index
+
+
 def read_compress_mat(fd):
     """ 
         Reference to function Read in CompressMatrix
@@ -343,6 +400,62 @@ def read_general_mat(fd, direct_access=False):
         return read_common_mat(fd)
 
 
+def read_nnet_io(fd):
+    """ 
+        Reference to function Read in class NnetIo
+        each NnetIo contains three member: string, Index, GeneralMatrix
+        I store them in the dict:{'name': ..., 'index': ..., 'matrix': ...}
+    """
+    expect_token(fd, '<NnetIo>')
+    nnet_io = {}
+
+    name = read_token(fd)
+    nnet_io['name'] = name
+    print_info('\tName of NnetIo: {}'.format(name))
+
+    index = read_index_vec(fd)
+    nnet_io['index'] = index
+    print_info(index)
+
+    mat = read_general_mat(fd)
+    nnet_io['matrix'] = mat
+    print_info(mat)
+    expect_token(fd, '</NnetIo>')
+    return nnet_io
+
+
+def read_nnet3_egs(fd):
+    """ 
+        Reference to function Read in class NnetExample
+        Return a list of dict, each dict represent a NnetIo object
+        a NnetExample contains several NnetIo
+    """
+    expect_token(fd, '<Nnet3Eg>')
+    expect_token(fd, '<NumIo>')
+    # num of the NnetIo
+    num_io = read_int32(fd)
+    egs = []
+    for _ in range(num_io):
+        egs.append(read_nnet_io(fd))
+    expect_token(fd, '</Nnet3Eg>')
+    return egs
+
+
+def read_nnet3_egs_ark(fd):
+    """ 
+        Usage:
+        for key, eg in read_nnet3_egs(ark):
+            print(key)
+            ...
+    """
+    while True:
+        key = read_key(fd)
+        if not key:
+            break
+        egs = read_nnet3_egs(fd)
+        yield key, egs
+
+
 def read_ark(fd):
     """ 
         Usage:
@@ -368,28 +481,34 @@ def read_ali(fd):
 
 
 # -----------------test part-------------------
-def _test_ali():
-    with open('pdf/pdf.1.ark', 'rb') as fd:
+def _test_ali(ali_ark):
+    with open(ali_ark, 'rb') as fd:
         for key, _ in read_ali(fd):
             print(key)
 
 
-def _test_write_ark():
-    with open('10.ark', 'rb') as ark, open('10.ark.new', 'wb') as dst:
+def _test_write_ark(src_ark, dst_ark):
+    with open(src_ark, 'rb') as ark, open(dst_ark, 'wb') as dst:
         for key, mat in read_ark(ark):
             write_token(dst, key)
-            # in binary mode
-            write_binary_symbol(dst)
+            write_binary_symbol(dst) # in binary mode
             write_common_mat(dst, mat)
 
 
-def _test_read_ark():
-    with open('10.ark.new', 'rb') as ark:
+def _test_read_ark(src_ark):
+    with open(src_ark, 'rb') as ark:
         for _, mat in read_ark(ark):
             print(mat.shape)
 
 
+def _test_read_nnet3_egs_ark(egs_ark):
+    with open(egs_ark, 'rb') as ark:
+        for key, egs in read_nnet3_egs_ark(ark):
+            print("{}: number of NnetIo: {:d}".format(key, len(egs)))
+
+
 if __name__ == '__main__':
-    _test_write_ark()
-    _test_read_ark()
+    # _test_write_ark("10.ark", "10.copy.ark")
+    # _test_read_ark("10.copy.ark")
     # _test_ali()
+    _test_read_nnet3_egs_ark("10.egs")

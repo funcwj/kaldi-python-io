@@ -6,6 +6,7 @@
     - ScriptReader
     - ArchiveWriter
     - AlignmentReader
+    - Nnet3EgsReader
 """
 
 import os
@@ -74,6 +75,18 @@ class Reader(object):
         else:
             raise IndexError("Unsupported index type: {}".format(type(index)))
 
+class SequentialReader(object):
+    """
+        Base class for sequential reader(only for .ark/.egs)
+    """
+    def __init__(self, ark_path):
+        if not os.path.exists(ark_path):
+            raise FileNotFoundError("Could not find {}".format(ark_path))
+        self.ark_path = ark_path
+    
+    def __iter__(self):
+        raise NotImplementedError
+
 
 class ScriptReader(Reader):
     """
@@ -122,19 +135,30 @@ class Writer(object):
     def write(self, key, value):
         raise NotImplementedError
 
-class ArchiveReader(object):
+class ArchiveReader(SequentialReader):
     """
         Sequential Reader for .ark object
     """
     def __init__(self, ark_path):
-        if not os.path.exists(ark_path):
-            raise FileNotFoundError("Could not find {}".format(ark_path))
-        self.ark_path = ark_path
+        super(ArchiveReader, self).__init__(ark_path)
     
     def __iter__(self):
         with open(self.ark_path, "rb") as fd:
             for key, mat in io.read_ark(fd):
                 yield key, mat
+
+class Nnet3EgsReader(SequentialReader):
+    """
+        Sequential Reader for .egs object
+    """
+    def __init__(self, ark_path):
+        super(Nnet3EgsReader, self).__init__(ark_path)
+    
+    def __iter__(self):
+        with open(self.ark_path, "rb") as fd:
+            for key, egs in io.read_nnet3_egs_ark(fd):
+                yield key, egs
+    
 
 class AlignmentReader(ScriptReader):
     """
@@ -163,7 +187,6 @@ class ArchiveWriter(Writer):
     def write(self, key, matrix):
         io.write_token(self.ark_file, key)
         offset = self.ark_file.tell()
-        # binary symbol
         io.write_binary_symbol(self.ark_file)
         io.write_common_mat(self.ark_file, matrix)
         abs_path = os.path.abspath(self.ark_path)
@@ -192,8 +215,14 @@ def test_alignment_reader(egs):
         print("{}: {}".format(key, vec.shape))
     print("TEST *test_alignment_reader* DONE!")
 
+def test_nnet3egs_reader(egs):
+    egs_reader = Nnet3EgsReader(egs)
+    for key, _ in egs_reader:
+        print("{}".format(key))
+    print("TEST *test_nnet3egs_reader* DONE!")
 
 if __name__ == "__main__":
     test_archive_writer("egs.ark", "egs.scp")
     test_script_reader("egs.scp")
     # test_alignment_reader("egs.scp")
+    # test_nnet3egs_reader("10.egs")
