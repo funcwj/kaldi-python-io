@@ -162,6 +162,19 @@ def read_common_mat(fd):
     mat = np.fromstring(mat_data, dtype=float_type)
     return mat.reshape(num_rows, num_cols)
 
+def read_common_float_vec(fd):
+    """
+        Read common vector(for class Vector in kaldi setup)
+    """
+    vec_type = read_token(fd)
+    print_info('\tType of the common vector: {}'.format(vec_type))
+    float_size = 4 if vec_type == 'FV' else 8
+    float_type = np.float32 if vec_type == 'FV' else np.float64
+    vec_size = read_int32(fd)
+    print_info('\tSize of the common vector: {}'.format(vec_size))
+    vec_data = fd.read(float_size * vec_size)
+    vec = np.fromstring(vec_data, dtype=float_type)
+    return vec
 
 def write_common_mat(fd, mat):
     """
