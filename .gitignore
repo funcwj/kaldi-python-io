@@ -1,4 +1,5 @@
 *.pyc
 .vscode/
+asset/foo.*
 .mypy_cache/
 __pycache__/
