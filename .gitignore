@@ -1,8 +1,4 @@
 *.pyc
-*.egs
-*.ark
-*.scp
-*.txt
 .vscode/
 .mypy_cache/
 __pycache__/
