@@ -14,7 +14,7 @@ A python(3.6+) wrapper for kaldi's data accessing.
 * ArchiveReader && AlignArchiveReader
     ```python
     # allow only sequential index
-    ark_reader = ArchiveReader("copy-feats ark:foo.ark ark:- |")
+    ark_reader = ArchiveReader("copy-feats ark:foo.ark ark:- |", matrix=True)
     for key, _ in ark_reader:
         print(key)
     ali_reader = AlignArchiveReader("gunzip -c foo.ali.gz |")
@@ -41,7 +41,7 @@ A python(3.6+) wrapper for kaldi's data accessing.
 * ScriptReader && AlignScriptReader
     ```python
     # allow sequential/random index
-    scp_reader = ScriptReader("shuf foo.scp | head -n 2")
+    scp_reader = ScriptReader("shuf foo.scp | head -n 2", matrix=True)
     for key, mat in scp_reader:
         print("{}: {}".format(key, mat.shape))
     ali_reader = AlignScriptReader("foo.ali.scp")

@@ -186,7 +186,7 @@ class ScriptReader(Reader):
         Reader for kaldi's scripts(for BaseFloat matrix)
     """
 
-    def __init__(self, ark_scp):
+    def __init__(self, ark_scp, matrix=True):
         def addr_processor(addr):
             addr_token = addr.split(":")
             if len(addr_token) == 1:
@@ -196,13 +196,15 @@ class ScriptReader(Reader):
 
         super(ScriptReader, self).__init__(
             ark_scp, addr_processor=addr_processor)
+        self.matrix = matrix
 
     def _load(self, key):
         path, offset = self.index_dict[key]
         with open(path, 'rb') as f:
             f.seek(offset)
             io.expect_binary(f)
-            ark = io.read_general_mat(f)
+            ark = io.read_general_mat(f) if self.matrix else io.read_float_vec(
+                f)
         return ark
 
 
@@ -236,21 +238,22 @@ class Writer(object):
 
 class ArchiveReader(SequentialReader):
     """
-        Sequential Reader for .ark object
+        Sequential Reader for Kalid's archive(.ark) object
     """
 
-    def __init__(self, ark_or_pipe):
+    def __init__(self, ark_or_pipe, matrix=True):
         super(ArchiveReader, self).__init__(ark_or_pipe)
+        self.matrix = matrix
 
     def __iter__(self):
         with ext_open(self.ark_or_pipe, "rb") as fd:
-            for key, mat in io.read_ark(fd):
+            for key, mat in io.read_ark(fd, matrix=self.matrix):
                 yield key, mat
 
 
 class Nnet3EgsReader(SequentialReader):
     """
-        Sequential Reader for .egs object
+        Sequential Reader for Kalid's nnet3 .egs object
     """
 
     def __init__(self, ark_or_pipe):
@@ -289,7 +292,7 @@ class AlignScriptReader(ScriptReader):
         with open(path, "rb") as f:
             f.seek(offset)
             io.expect_binary(f)
-            ark = io.read_common_int_vec(f)
+            ark = io.read_int_vec(f)
         return ark
 
 
@@ -298,21 +301,26 @@ class ArchiveWriter(Writer):
         Writer for kaldi's archive && scripts(for BaseFloat matrix)
     """
 
-    def __init__(self, ark_path, scp_path=None):
+    def __init__(self, ark_path, scp_path=None, matrix=True):
         super(ArchiveWriter, self).__init__(ark_path, scp_path)
+        self.matrix = matrix
 
-    def write(self, key, matrix):
+    def write(self, key, obj):
         io.write_token(self.ark_file, key)
         if self.ark_path != "-":
             offset = self.ark_file.tell()
         io.write_binary_symbol(self.ark_file)
-        io.write_common_mat(self.ark_file, matrix)
+        if self.matrix:
+            io.write_common_mat(self.ark_file, obj)
+        else:
+            io.write_float_vec(self.ark_file, obj)
         if self.scp_file:
             self.scp_file.write("{}\t{}:{:d}\n".format(
                 key, os.path.abspath(self.ark_path), offset))
 
 
 def test_archive_writer(ark, scp):
+    # for matrix
     with ArchiveWriter(ark, scp) as writer:
         for i in range(10):
             mat = np.random.rand(100, 20)
@@ -320,20 +328,30 @@ def test_archive_writer(ark, scp):
     scp_reader = ScriptReader(scp)
     for key, mat in scp_reader:
         print("{0}: {1}".format(key, mat.shape))
+    # for vector
+    with ArchiveWriter(ark, scp, matrix=False) as writer:
+        for i in range(10):
+            vec = np.random.rand(100)
+            print(vec)
+            writer.write("vec-{:d}".format(i), vec)
+    scp_reader = ScriptReader(scp, matrix=False)
+    for key, vec in scp_reader:
+        print(vec)
+        print("{0}: {1}".format(key, vec.size))
     print("TEST *test_archieve_writer* DONE!")
 
 
-def test_archive_reader(ark_or_pipe):
-    ark_reader = ArchiveReader(ark_or_pipe)
-    for key, mat in ark_reader:
-        print("{0}: {1}".format(key, mat.shape))
+def test_archive_reader(ark_or_pipe, matrix=True):
+    ark_reader = ArchiveReader(ark_or_pipe, matrix=matrix)
+    for key, obj in ark_reader:
+        print("{0}: {1}".format(key, obj.shape))
     print("TEST *test_archive_reader* DONE!")
 
 
-def test_script_reader(scp):
-    scp_reader = ScriptReader(scp)
-    for key, mat in scp_reader:
-        print("{0}: {1}".format(key, mat.shape))
+def test_script_reader(scp, matrix=True):
+    scp_reader = ScriptReader(scp, matrix=matrix)
+    for key, obj in scp_reader:
+        print("{0}: {1}".format(key, obj.shape))
     print("TEST *test_script_reader* DONE!")
 
 
@@ -354,11 +372,13 @@ def test_nnet3egs_reader(egs):
 if __name__ == "__main__":
     test_archive_writer("asset/foo.ark", "asset/foo.scp")
     # archive_reader
-    test_archive_reader("asset/6.ark")
+    test_archive_reader("asset/6.mat.ark", matrix=True)
+    test_archive_reader("asset/6.vec.ark", matrix=False)
     test_archive_reader("copy-feats ark:asset/6.ark ark:- |")
     # script_reader
-    test_script_reader("asset/6.scp")
-    test_script_reader("shuf asset/6.scp | head -n 2 |")
+    test_script_reader("asset/6.mat.scp", matrix=True)
+    test_script_reader("asset/6.vec.scp", matrix=False)
+    test_script_reader("shuf asset/6.mat.scp | head -n 2 |")
     # align_archive_reader
     test_align_archive_reader("gunzip -c asset/10.ali.gz |")
     # nnet3egs_reader

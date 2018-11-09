@@ -28,7 +28,7 @@ def peek_char(fd):
     # peek_c = fd.read(1)
     # fd.seek(-1, 1)
     # see https://stackoverflow.com/questions/25070952/python-why-does-peek1-return-8k-bytes-instead-of-1-byte
-    peek_c = fd.peek(1)[: 1]
+    peek_c = fd.peek(1)[:1]
     if type(peek_c) == bytes:
         peek_c = bytes.decode(peek_c)
     return peek_c
@@ -164,19 +164,6 @@ def read_common_mat(fd):
     mat = np.fromstring(mat_data, dtype=float_type)
     return mat.reshape(num_rows, num_cols)
 
-def read_common_float_vec(fd):
-    """
-        Read common vector(for class Vector in kaldi setup)
-    """
-    vec_type = read_token(fd)
-    print_info('\tType of the common vector: {}'.format(vec_type))
-    float_size = 4 if vec_type == 'FV' else 8
-    float_type = np.float32 if vec_type == 'FV' else np.float64
-    vec_size = read_int32(fd)
-    print_info('\tSize of the common vector: {}'.format(vec_size))
-    vec_data = fd.read(float_size * vec_size)
-    vec = np.fromstring(vec_data, dtype=float_type)
-    return vec
 
 def write_common_mat(fd, mat):
     """
@@ -191,7 +178,36 @@ def write_common_mat(fd, mat):
     fd.write(mat.tobytes())
 
 
-def read_common_int_vec(fd, direct_access=False):
+def read_float_vec(fd):
+    """
+        Read float vector(for class Vector in kaldi setup)
+        see matrix/kaldi-vector.cc
+    """
+    vec_type = read_token(fd)
+    print_info('\tType of the common vector: {}'.format(vec_type))
+    float_size = 4 if vec_type == 'FV' else 8
+    float_type = np.float32 if vec_type == 'FV' else np.float64
+    dim = read_int32(fd)
+    print_info('\tDim of the common vector: {}'.format(dim))
+    vec_data = fd.read(float_size * dim)
+    return np.fromstring(vec_data, dtype=float_type)
+
+
+def write_float_vec(fd, vec):
+    """
+        Write a float vector
+    """
+    assert vec.dtype == np.float32 or vec.dtype == np.float64
+    vec_type = 'FV' if vec.dtype == np.float32 else 'DV'
+    write_token(fd, vec_type)
+    if vec.ndim != 1:
+        raise RuntimeError("write_float_vec accept 1D-vector only")
+    dim = vec.size
+    write_int32(fd, dim)
+    fd.write(vec.tobytes())
+
+
+def read_int_vec(fd, direct_access=False):
     """
         Read int32 vector(alignments)
     """
@@ -341,8 +357,8 @@ def read_index(fd, index, cur_set):
             if c != 127:
                 throw_on_error(
                     False,
-                    'Unexpected character {} encountered while reading Index vector.'.
-                    format(c))
+                    'Unexpected character {} encountered while reading Index vector.'
+                    .format(c))
             return read_index_tuple(fd)
     else:
         prev_index = cur_set[index - 1]
@@ -352,8 +368,8 @@ def read_index(fd, index, cur_set):
             if c != 127:
                 throw_on_error(
                     False,
-                    'Unexpected character {} encountered while reading Index vector.'.
-                    format(c))
+                    'Unexpected character {} encountered while reading Index vector.'
+                    .format(c))
             return read_index_tuple(fd)
 
 
@@ -471,7 +487,7 @@ def read_nnet3_egs_ark(fd):
         yield key, egs
 
 
-def read_ark(fd):
+def read_ark(fd, matrix=True):
     """ 
         Usage:
         for key, mat in read_ark(ark):
@@ -482,8 +498,8 @@ def read_ark(fd):
         key = read_key(fd)
         if not key:
             break
-        mat = read_general_mat(fd)
-        yield key, mat
+        obj = read_general_mat(fd) if matrix else read_float_vec(fd)
+        yield key, obj
 
 
 def read_ali(fd):
@@ -491,7 +507,7 @@ def read_ali(fd):
         key = read_key(fd)
         if not key:
             break
-        ali = read_common_int_vec(fd)
+        ali = read_int_vec(fd)
         yield key, ali
 
 
@@ -506,7 +522,7 @@ def _test_write_ark(src_ark, dst_ark):
     with open(src_ark, 'rb') as ark, open(dst_ark, 'wb') as dst:
         for key, mat in read_ark(ark):
             write_token(dst, key)
-            write_binary_symbol(dst) # in binary mode
+            write_binary_symbol(dst)  # in binary mode
             write_common_mat(dst, mat)
 
 
