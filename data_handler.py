@@ -57,6 +57,7 @@ def _fopen(fname, mode):
         raise ValueError("Unknown open mode: {mode}".format(mode=mode))
     if not fname:
         return None
+    fname = fname.rstrip()
     if fname == "-":
         if mode in ["w", "wb"]:
             return sys.stdout.buffer if mode == "wb" else sys.stdout
