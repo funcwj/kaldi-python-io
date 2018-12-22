@@ -112,9 +112,6 @@ def parse_scps(scp_path, addr_processor=lambda x: x):
     line = 0
     with ext_open(scp_path, "r") as f:
         for raw_line in f:
-            # from bytes to str
-            if type(raw_line) is bytes:
-                raw_line = bytes.decode(raw_line)
             scp_tokens = raw_line.strip().split()
             line += 1
             if len(scp_tokens) != 2:
