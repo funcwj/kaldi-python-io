@@ -19,6 +19,8 @@ import _thread
 import threading
 import subprocess
 
+from io import TextIOWrapper
+
 import numpy as np
 import iobase as io
 
@@ -64,7 +66,8 @@ def _fopen(fname, mode):
         else:
             return sys.stdin.buffer if mode == "rb" else sys.stdin
     elif fname[-1] == "|":
-        return pipe_fopen(fname[:-1], mode, background=(mode == "rb"))
+        pin = pipe_fopen(fname[:-1], mode, background=(mode == "rb"))
+        return pin if mode == "rb" else TextIOWrapper(pin)
     else:
         if mode in ["r", "rb"] and not os.path.exists(fname):
             raise FileNotFoundError(
@@ -372,7 +375,7 @@ if __name__ == "__main__":
     # archive_reader
     test_archive_reader("asset/6.mat.ark", matrix=True)
     test_archive_reader("asset/6.vec.ark", matrix=False)
-    test_archive_reader("copy-feats ark:asset/6.ark ark:- |")
+    test_archive_reader("copy-feats ark:asset/6.mat.ark ark:- |")
     # script_reader
     test_script_reader("asset/6.mat.scp", matrix=True)
     test_script_reader("asset/6.vec.scp", matrix=False)
