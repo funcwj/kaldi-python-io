@@ -1,6 +1,6 @@
 ## kaldi IO
 
-A python(3.6+) wrapper for kaldi's data accessing.
+A python (3.6+) wrapper for kaldi's data accessing.
 
 ### Support Type
 
