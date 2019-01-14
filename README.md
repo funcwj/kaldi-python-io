@@ -48,10 +48,3 @@ A python (3.6+) wrapper for kaldi's data accessing.
     for key, ali in ali_reader:
         print("{}: {}".format(key, ali.shape))
     ```
-
-### Test
-export Kaldi `path.sh`, then run:
-```
-cd kaldi-python-io
-python inst.py
-```
