@@ -412,7 +412,7 @@ def read_compress_mat(fd):
     return mat
 
 
-def read_general_mat(fd, direct_access=False):
+def read_float_mat(fd, direct_access=False):
     """ 
         Reference to function Read in class GeneralMatrix
         Return compress_mat/sparse_mat/common_mat
@@ -445,7 +445,7 @@ def read_nnet_io(fd):
     nnet_io['index'] = index
     print_info(index)
 
-    mat = read_general_mat(fd)
+    mat = read_float_mat(fd)
     nnet_io['matrix'] = mat
     print_info(mat)
     expect_token(fd, '</NnetIo>')
@@ -491,11 +491,12 @@ def read_ark(fd, matrix=True):
             print(key)
             ...
     """
+    loadf = read_float_mat if matrix else read_float_vec
     while True:
         key = read_key(fd)
         if not key:
             break
-        obj = read_general_mat(fd) if matrix else read_float_vec(fd)
+        obj = loadf(fd)
         yield key, obj
 
 

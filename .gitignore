@@ -1,5 +1,11 @@
-*.pyc
+
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
 .vscode/
+
 asset/foo.*
-.mypy_cache/
+
 __pycache__/
