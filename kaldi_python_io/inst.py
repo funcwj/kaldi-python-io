@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # wujian@2018
 """
-    Simple wrapper for iobase.py
+    Simple wrapper for _io_kernel.py
     - ArchiveReader
     - ScriptReader
     - ArchiveWriter
@@ -22,7 +22,12 @@ import subprocess
 from io import TextIOWrapper
 
 import numpy as np
-import iobase as io
+from . import _io_kernel as io
+
+__all__ = [
+    "ArchiveReader", "ScriptReader", "AlignArchiveReader", "AlignScriptReader",
+    "ArchiveWriter", "Nnet3EgsReader", "Reader"
+]
 
 
 def pipe_fopen(command, mode, background=True):
@@ -118,8 +123,9 @@ def parse_scps(scp_path, addr_processor=lambda x: x):
             scp_tokens = raw_line.strip().split()
             line += 1
             if len(scp_tokens) != 2:
-                raise RuntimeError("Error format in line[{:d}]: {}".format(
-                    line, raw_line))
+                raise RuntimeError(
+                    "For {}, format error in line[{:d}]: {}".format(
+                        scp_path, line, raw_line))
             key, addr = scp_tokens
             if key in scp_dict:
                 raise ValueError("Duplicate key \'{0}\' exists in {1}".format(
@@ -137,8 +143,9 @@ class Reader(object):
         self.index_dict = parse_scps(scp_path, addr_processor=addr_processor)
         self.index_keys = list(self.index_dict.keys())
 
+    # return values
     def _load(self, key):
-        raise NotImplementedError
+        return self.index_dict[key]
 
     # number of utterance
     def __len__(self):
@@ -197,16 +204,26 @@ class ScriptReader(Reader):
 
         super(ScriptReader, self).__init__(
             ark_scp, addr_processor=addr_processor)
-        self.matrix = matrix
+        self.loadf = io.read_float_mat if matrix else io.read_float_vec
+        self.fmgr = dict()
+
+    def __del__(self):
+        for name in self.fmgr:
+            self.fmgr[name].close()
+
+    def _open(self, obj, addr):
+        if obj not in self.fmgr:
+            self.fmgr[obj] = open(obj, "rb")
+        arkf = self.fmgr[obj]
+        arkf.seek(addr)
+        return arkf
 
     def _load(self, key):
-        path, offset = self.index_dict[key]
-        with open(path, 'rb') as f:
-            f.seek(offset)
-            io.expect_binary(f)
-            ark = io.read_general_mat(f) if self.matrix else io.read_float_vec(
-                f)
-        return ark
+        path, addr = self.index_dict[key]
+        fd = self._open(path, addr)
+        io.expect_binary(fd)
+        obj = self.loadf(fd)
+        return obj
 
 
 class Writer(object):
@@ -289,35 +306,32 @@ class AlignScriptReader(ScriptReader):
         super(AlignScriptReader, self).__init__(ark_scp)
 
     def _load(self, key):
-        path, offset = self.index_dict[key]
-        with open(path, "rb") as f:
-            f.seek(offset)
-            io.expect_binary(f)
-            ark = io.read_int_vec(f)
-        return ark
+        path, addr = self.index_dict[key]
+        fd = self._open(path, addr)
+        io.expect_binary(fd)
+        obj = io.read_int_vec(fd)
+        return obj
 
 
 class ArchiveWriter(Writer):
     """
-        Writer for kaldi's archive && scripts(for BaseFloat matrix)
+        Writer for kaldi's archive && scripts (for BaseFloat matrix)
     """
 
     def __init__(self, ark_path, scp_path=None, matrix=True):
         super(ArchiveWriter, self).__init__(ark_path, scp_path)
-        self.matrix = matrix
+        self.dumpf = io.write_common_mat if matrix else io.write_float_vec
 
     def write(self, key, obj):
         io.write_token(self.ark_file, key)
         if self.ark_path != "-":
             offset = self.ark_file.tell()
         io.write_binary_symbol(self.ark_file)
-        if self.matrix:
-            io.write_common_mat(self.ark_file, obj)
-        else:
-            io.write_float_vec(self.ark_file, obj)
+        self.dumpf(self.ark_file, obj)
         if self.scp_file:
-            self.scp_file.write("{}\t{}:{:d}\n".format(
-                key, os.path.abspath(self.ark_path), offset))
+            record = "{0}\t{1}:{2}\n".format(key, os.path.abspath(
+                self.ark_path), offset)
+            self.scp_file.write(record)
 
 
 def test_archive_writer(ark, scp):

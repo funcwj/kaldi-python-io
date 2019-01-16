@@ -4,9 +4,9 @@ A python (3.6+) wrapper for kaldi's data accessing.
 
 ### Support Type
 
-* kaldi's binary archives(*.ark)
+* kaldi's binary archives (*.ark)
 * kaldi's scripts (alignments & features, *.scp)
-* kaldi nnet3 data examples in binary(*.egs)
+* kaldi nnet3 data examples in binary (*.egs)
 * new: support input through pipe
 
 ### Usage
@@ -48,10 +48,3 @@ A python (3.6+) wrapper for kaldi's data accessing.
     for key, ali in ali_reader:
         print("{}: {}".format(key, ali.shape))
     ```
-
-### Test
-export Kaldi `path.sh`, then run:
-```
-cd kaldi-python-io
-python data_handler.py
-```

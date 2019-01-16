@@ -25,22 +25,15 @@ def peek_char(fd):
     """ 
         Read a char and seek the point back
     """
-    # peek_c = fd.read(1)
-    # fd.seek(-1, 1)
-    # see https://stackoverflow.com/questions/25070952/python-why-does-peek1-return-8k-bytes-instead-of-1-byte
     peek_c = fd.peek(1)[:1]
-    if type(peek_c) == bytes:
-        peek_c = bytes.decode(peek_c)
-    return peek_c
+    return bytes.decode(peek_c)
 
 
 def expect_space(fd):
     """ 
         Generally, there is a space following the string token, we need to consume it
     """
-    space = fd.read(1)
-    if type(space) == bytes:
-        space = bytes.decode(space)
+    space = bytes.decode(fd.read(1))
     throw_on_error(space == ' ', 'Expect space, but gets {}'.format(space))
 
 
@@ -48,12 +41,10 @@ def expect_binary(fd):
     """ 
         Read the binary flags in kaldi, the scripts only support reading egs in binary format
     """
-    flags = fd.read(2)
-    if type(flags) == bytes:
-        flags = bytes.decode(flags)
+    flags = bytes.decode(fd.read(2))
     # throw_on_error(flags == '\0B', 'Expect binary flags \'B\', but gets {}'.format(flags))
     throw_on_error(flags == '\0B',
-                   'Expect binary flags \'\\0B\', but gets {}'.format(flags))
+                   'Expect binary flag, but gets {}'.format(flags))
 
 
 def read_token(fd):
@@ -62,9 +53,7 @@ def read_token(fd):
     """
     key = ''
     while True:
-        c = fd.read(1)
-        if type(c) == bytes:
-            c = bytes.decode(c)
+        c = bytes.decode(fd.read(1))
         if c == ' ' or c == '':
             break
         key += c
@@ -75,10 +64,7 @@ def write_token(fd, token):
     """
         Write a string token, following a space symbol
     """
-    if type(token) == str:
-        token = str.encode(token)
-    fd.write(token)
-    fd.write(str.encode(' '))
+    fd.write(str.encode(token + " "))
 
 
 def expect_token(fd, ref):
@@ -111,9 +97,7 @@ def read_int32(fd):
     """ 
         Read a value in type 'int32' in kaldi setup
     """
-    int_size = fd.read(1)
-    if type(int_size) == bytes:
-        int_size = bytes.decode(int_size)
+    int_size = bytes.decode(fd.read(1))
     throw_on_error(int_size == '\04',
                    'Expect \'\\04\', but gets {}'.format(int_size))
     int_str = fd.read(4)
@@ -134,10 +118,7 @@ def read_float32(fd):
     """ 
         Read a value in type 'BaseFloat' in kaldi setup
     """
-    float_size = fd.read(1)
-    # throw_on_error(float_size == '\04')
-    if type(float_size) == bytes:
-        float_size = bytes.decode(float_size)
+    float_size = bytes.decode(fd.read(1))
     throw_on_error(float_size == '\04',
                    'Expect \'\\04\', but gets {}'.format(float_size))
     float_str = fd.read(4)
@@ -154,6 +135,8 @@ def read_common_mat(fd):
     """
     mat_type = read_token(fd)
     print_info('\tType of the common matrix: {}'.format(mat_type))
+    if mat_type not in ["FM", "DM"]:
+        raise RuntimeError("Unknown matrix type in kaldi: {}".format(mat_type))
     float_size = 4 if mat_type == 'FM' else 8
     float_type = np.float32 if mat_type == 'FM' else np.float64
     num_rows = read_int32(fd)
@@ -169,7 +152,8 @@ def write_common_mat(fd, mat):
     """
         Write a common matrix
     """
-    assert mat.dtype == np.float32 or mat.dtype == np.float64
+    if mat.dtype not in [np.float32, np.float64]:
+        raise RuntimeError("Unsupported numpy dtype: {}".format(mat.dtype))
     mat_type = 'FM' if mat.dtype == np.float32 else 'DM'
     write_token(fd, mat_type)
     num_rows, num_cols = mat.shape
@@ -178,13 +162,17 @@ def write_common_mat(fd, mat):
     fd.write(mat.tobytes())
 
 
-def read_float_vec(fd):
+def read_float_vec(fd, direct_access=False):
     """
         Read float vector(for class Vector in kaldi setup)
         see matrix/kaldi-vector.cc
     """
+    if direct_access:
+        expect_binary(fd)
     vec_type = read_token(fd)
     print_info('\tType of the common vector: {}'.format(vec_type))
+    if vec_type not in ["FV", "DV"]:
+        raise RuntimeError("Unknown matrix type in kaldi: {}".format(vec_type))
     float_size = 4 if vec_type == 'FV' else 8
     float_type = np.float32 if vec_type == 'FV' else np.float64
     dim = read_int32(fd)
@@ -197,7 +185,8 @@ def write_float_vec(fd, vec):
     """
         Write a float vector
     """
-    assert vec.dtype == np.float32 or vec.dtype == np.float64
+    if vec.dtype not in [np.float32, np.float64]:
+        raise RuntimeError("Unsupported numpy dtype: {}".format(vec.dtype))
     vec_type = 'FV' if vec.dtype == np.float32 else 'DV'
     write_token(fd, vec_type)
     if vec.ndim != 1:
@@ -412,7 +401,7 @@ def read_compress_mat(fd):
     return mat
 
 
-def read_general_mat(fd, direct_access=False):
+def read_float_mat(fd, direct_access=False):
     """ 
         Reference to function Read in class GeneralMatrix
         Return compress_mat/sparse_mat/common_mat
@@ -445,7 +434,7 @@ def read_nnet_io(fd):
     nnet_io['index'] = index
     print_info(index)
 
-    mat = read_general_mat(fd)
+    mat = read_float_mat(fd)
     nnet_io['matrix'] = mat
     print_info(mat)
     expect_token(fd, '</NnetIo>')
@@ -491,11 +480,12 @@ def read_ark(fd, matrix=True):
             print(key)
             ...
     """
+    loadf = read_float_mat if matrix else read_float_vec
     while True:
         key = read_key(fd)
         if not key:
             break
-        obj = read_general_mat(fd) if matrix else read_float_vec(fd)
+        obj = loadf(fd)
         yield key, obj
 
 
