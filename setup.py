@@ -2,9 +2,11 @@
 
 from setuptools import setup, find_packages
 
+VERSION = "0.1"
+
 setup(
     name="kaldi-python-io",
-    version="0.1",
+    version=VERSION,
     description="A pure python IO interface for data accessing in kaldi",
     url="https://github.com/funcwj/kaldi-python-io",
     author="Jian Wu",
