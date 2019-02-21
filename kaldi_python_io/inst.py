@@ -200,6 +200,8 @@ class ScriptReader(Reader):
     """
 
     def __init__(self, ark_scp, matrix=True):
+        self.fmgr = dict()
+
         def addr_processor(addr):
             addr_token = addr.split(":")
             if len(addr_token) == 1:
@@ -208,9 +210,8 @@ class ScriptReader(Reader):
             return (path, offset)
 
         super(ScriptReader, self).__init__(
-            ark_scp, addr_processor=addr_processor)
+            ark_scp, value_processor=addr_processor)
         self.loadf = io.read_float_mat if matrix else io.read_float_vec
-        self.fmgr = dict()
 
     def __del__(self):
         for name in self.fmgr:
