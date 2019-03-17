@@ -48,3 +48,5 @@ A python (3.6+) wrapper for kaldi's data accessing.
     for key, ali in ali_reader:
         print("{}: {}".format(key, ali.shape))
     ```
+
+NOTE: Reading compressed matrix is much slower than common matrices, so be careful to use it.
