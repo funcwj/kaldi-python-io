@@ -1,4 +1,5 @@
 
+egs.py
 *.py[cod]
 *.egg-info/
 build/
