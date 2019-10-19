@@ -10,7 +10,7 @@ A python (3.6+) wrapper for kaldi's data accessing.
 
 ### Install
 
-`python setup.py install` or `pip install kaldi_python_io`
+`python setup.py install` or `pip install kaldi-python-io`
 
 ### Usage
 
