@@ -1,4 +1,4 @@
-## kaldi IO
+## Kaldi Python IO
 
 A python (3.6+) wrapper for kaldi's data accessing.
 
@@ -7,7 +7,10 @@ A python (3.6+) wrapper for kaldi's data accessing.
 * kaldi's binary archives (*.ark)
 * kaldi's scripts (alignments & features, *.scp)
 * kaldi nnet3 data examples in binary (*.egs)
-* new: support input through pipe
+
+### Install
+
+`python setup.py install` or `pip install kaldi_python_io`
 
 ### Usage
 
