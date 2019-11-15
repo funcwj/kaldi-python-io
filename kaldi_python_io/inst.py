@@ -44,8 +44,8 @@ def pipe_fopen(command, mode, background=True):
             _thread.interrupt_main()
 
     if background:
-        thread = threading.Thread(
-            target=background_command_waiter, args=(command, p))
+        thread = threading.Thread(target=background_command_waiter,
+                                  args=(command, p))
         # exits abnormally if main thread is terminated .
         thread.daemon = True
         thread.start()
@@ -98,7 +98,6 @@ class ext_open(object):
         ...
     
     """
-
     def __init__(self, fname, mode):
         self.fname = fname
         self.mode = mode
@@ -122,18 +121,20 @@ def parse_scps(scp_path, value_processor=lambda x: x, num_tokens=2):
         for raw_line in f:
             scp_tokens = raw_line.strip().split()
             line += 1
-            if num_tokens >= 2 and len(scp_tokens) != num_tokens or len(
-                    scp_tokens) < 2:
-                raise RuntimeError(
-                    "For {}, format error in line[{:d}]: {}".format(
-                        scp_path, line, raw_line))
-            if num_tokens == 2:
-                key, value = scp_tokens
+            if scp_tokens[-1] == "|":
+                key, value = scp_tokens[0], " ".join(scp_tokens[1:])
             else:
-                key, value = scp_tokens[0], scp_tokens[1:]
+                token_len = len(scp_tokens)
+                if num_tokens >= 2 and token_len != num_tokens or token_len < 2:
+                    raise RuntimeError(f"For {scp_path}, format error " +
+                                       f"in line[{line:d}]: {raw_line}")
+                if num_tokens == 2:
+                    key, value = scp_tokens
+                else:
+                    key, value = scp_tokens[0], scp_tokens[1:]
             if key in scp_dict:
-                raise ValueError("Duplicate key \'{0}\' exists in {1}".format(
-                    key, scp_path))
+                raise ValueError(
+                    f"Duplicate key \'{key}\' exists in {scp_path}")
             scp_dict[key] = value_processor(value)
     return scp_dict
 
@@ -142,10 +143,10 @@ class Reader(object):
     """
         Base class for sequential/random accessing, to be implemented
     """
-
     def __init__(self, scp_path, value_processor=lambda x: x, num_tokens=2):
-        self.index_dict = parse_scps(
-            scp_path, value_processor=value_processor, num_tokens=num_tokens)
+        self.index_dict = parse_scps(scp_path,
+                                     value_processor=value_processor,
+                                     num_tokens=num_tokens)
         self.index_keys = list(self.index_dict.keys())
 
     # return values
@@ -186,7 +187,6 @@ class SequentialReader(object):
     """
         Base class for sequential reader(only for .ark/.egs)
     """
-
     def __init__(self, ark_or_pipe):
         self.ark_or_pipe = ark_or_pipe
 
@@ -198,7 +198,6 @@ class ScriptReader(Reader):
     """
         Reader for kaldi's scripts(for BaseFloat matrix)
     """
-
     def __init__(self, ark_scp, matrix=True):
         self.fmgr = dict()
 
@@ -209,8 +208,8 @@ class ScriptReader(Reader):
             path, offset = ":".join(addr_token[0:-1]), int(addr_token[-1])
             return (path, offset)
 
-        super(ScriptReader, self).__init__(
-            ark_scp, value_processor=addr_processor)
+        super(ScriptReader, self).__init__(ark_scp,
+                                           value_processor=addr_processor)
         self.loadf = io.read_float_mat if matrix else io.read_float_vec
 
     def __del__(self):
@@ -236,7 +235,6 @@ class Writer(object):
     """
         Base class, to be implemented
     """
-
     def __init__(self, ark_path, scp_path=None):
         self.scp_path = scp_path
         self.ark_path = ark_path
@@ -264,7 +262,6 @@ class ArchiveReader(SequentialReader):
     """
         Sequential Reader for Kalid's archive(.ark) object
     """
-
     def __init__(self, ark_or_pipe, matrix=True):
         super(ArchiveReader, self).__init__(ark_or_pipe)
         self.matrix = matrix
@@ -279,7 +276,6 @@ class Nnet3EgsReader(SequentialReader):
     """
         Sequential Reader for Kalid's nnet3 .egs object
     """
-
     def __init__(self, ark_or_pipe):
         super(Nnet3EgsReader, self).__init__(ark_or_pipe)
 
@@ -293,7 +289,6 @@ class AlignArchiveReader(SequentialReader):
     """
         Reader for kaldi's alignment archives
     """
-
     def __init__(self, ark_or_pipe):
         super(AlignArchiveReader, self).__init__(ark_or_pipe)
 
@@ -307,7 +302,6 @@ class AlignScriptReader(ScriptReader):
     """
         Reader for kaldi's scripts(for int32 vector, such as alignments)
     """
-
     def __init__(self, ark_scp):
         super(AlignScriptReader, self).__init__(ark_scp)
 
@@ -323,7 +317,6 @@ class ArchiveWriter(Writer):
     """
         Writer for kaldi's archive && scripts (for BaseFloat matrix)
     """
-
     def __init__(self, ark_path, scp_path=None, matrix=True):
         super(ArchiveWriter, self).__init__(ark_path, scp_path)
         self.dumpf = io.write_common_mat if matrix else io.write_float_vec
@@ -335,7 +328,7 @@ class ArchiveWriter(Writer):
         io.write_binary_symbol(self.ark_file)
         self.dumpf(self.ark_file, obj)
         if self.scp_file:
-            record = "{0}\t{1}:{2}\n".format(key, os.path.abspath(
-                self.ark_path), offset)
+            record = "{0}\t{1}:{2}\n".format(key,
+                                             os.path.abspath(self.ark_path),
+                                             offset)
             self.scp_file.write(record)
-

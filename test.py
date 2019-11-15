@@ -2,11 +2,12 @@
 
 # wujian@2019
 
-import numpy as np 
+import numpy as np
 
 from kaldi_python_io import ScriptReader, ArchiveReader
 from kaldi_python_io import AlignArchiveReader, Nnet3EgsReader
 from kaldi_python_io import ArchiveWriter
+
 
 def test_archive_writer(ark, scp):
     # for matrix
