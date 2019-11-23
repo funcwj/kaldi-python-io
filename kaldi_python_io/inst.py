@@ -110,7 +110,10 @@ class ext_open(object):
         _fclose(self.fname, self.fd)
 
 
-def parse_scps(scp_path, value_processor=lambda x: x, num_tokens=2):
+def parse_scps(scp_path,
+               value_processor=lambda x: x,
+               num_tokens=2,
+               restrict=True):
     """
     Parse kaldi's script(.scp) file with supported for stdin
     WARN: last line of scripts could not be None and with "\n" end
@@ -125,7 +128,7 @@ def parse_scps(scp_path, value_processor=lambda x: x, num_tokens=2):
                 key, value = scp_tokens[0], " ".join(scp_tokens[1:])
             else:
                 token_len = len(scp_tokens)
-                if num_tokens >= 2 and token_len != num_tokens or token_len < 2:
+                if num_tokens >= 2 and token_len != num_tokens or restrict and token_len < 2:
                     raise RuntimeError(f"For {scp_path}, format error " +
                                        f"in line[{line:d}]: {raw_line}")
                 if num_tokens == 2:
