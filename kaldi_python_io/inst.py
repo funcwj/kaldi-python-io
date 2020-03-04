@@ -186,54 +186,6 @@ class Reader(object):
         return self._load(index)
 
 
-class SequentialReader(object):
-    """
-        Base class for sequential reader(only for .ark/.egs)
-    """
-    def __init__(self, ark_or_pipe):
-        self.ark_or_pipe = ark_or_pipe
-
-    def __iter__(self):
-        raise NotImplementedError
-
-
-class ScriptReader(Reader):
-    """
-        Reader for kaldi's scripts(for BaseFloat matrix)
-    """
-    def __init__(self, ark_scp, matrix=True):
-        self.fmgr = dict()
-
-        def addr_processor(addr):
-            addr_token = addr.split(":")
-            if len(addr_token) == 1:
-                raise ValueError("Unsupported scripts address format")
-            path, offset = ":".join(addr_token[0:-1]), int(addr_token[-1])
-            return (path, offset)
-
-        super(ScriptReader, self).__init__(ark_scp,
-                                           value_processor=addr_processor)
-        self.loadf = io.read_float_mat if matrix else io.read_float_vec
-
-    def __del__(self):
-        for name in self.fmgr:
-            self.fmgr[name].close()
-
-    def _open(self, obj, addr):
-        if obj not in self.fmgr:
-            self.fmgr[obj] = open(obj, "rb")
-        arkf = self.fmgr[obj]
-        arkf.seek(addr)
-        return arkf
-
-    def _load(self, key):
-        path, addr = self.index_dict[key]
-        fd = self._open(path, addr)
-        io.expect_binary(fd)
-        obj = self.loadf(fd)
-        return obj
-
-
 class Writer(object):
     """
         Base class, to be implemented
@@ -261,17 +213,62 @@ class Writer(object):
         raise NotImplementedError
 
 
+class SequentialReader(object):
+    """
+        Base class for sequential reader(only for .ark/.egs)
+    """
+    def __init__(self, ark_or_pipe):
+        self.ark_or_pipe = ark_or_pipe
+
+    def __iter__(self):
+        raise NotImplementedError
+
+
+class ScriptReader(Reader):
+    """
+        Reader for kaldi's scripts(for BaseFloat matrix)
+    """
+    def __init__(self, ark_scp):
+        self.fmgr = dict()
+
+        def addr_processor(addr):
+            addr_token = addr.split(":")
+            if len(addr_token) == 1:
+                raise ValueError("Unsupported scripts address format")
+            path, offset = ":".join(addr_token[0:-1]), int(addr_token[-1])
+            return (path, offset)
+
+        super(ScriptReader, self).__init__(ark_scp,
+                                           value_processor=addr_processor)
+
+    def __del__(self):
+        for name in self.fmgr:
+            self.fmgr[name].close()
+
+    def _open(self, obj, addr):
+        if obj not in self.fmgr:
+            self.fmgr[obj] = open(obj, "rb")
+        arkf = self.fmgr[obj]
+        arkf.seek(addr)
+        return arkf
+
+    def _load(self, key):
+        path, addr = self.index_dict[key]
+        fd = self._open(path, addr)
+        obj = io.read_float_mat_vec(fd, direct_access=True)
+        return obj
+
+
 class ArchiveReader(SequentialReader):
     """
         Sequential Reader for Kalid's archive(.ark) object
     """
-    def __init__(self, ark_or_pipe, matrix=True):
+    def __init__(self, ark_or_pipe):
         super(ArchiveReader, self).__init__(ark_or_pipe)
-        self.matrix = matrix
 
     def __iter__(self):
         with ext_open(self.ark_or_pipe, "rb") as fd:
-            for key, mat in io.read_ark(fd, matrix=self.matrix):
+            for key, mat in io.read_float_ark(fd):
                 yield key, mat
 
 
@@ -297,7 +294,7 @@ class AlignArchiveReader(SequentialReader):
 
     def __iter__(self):
         with ext_open(self.ark_or_pipe, "rb") as fd:
-            for key, ali in io.read_ali(fd):
+            for key, ali in io.read_int32_ali(fd):
                 yield key, ali
 
 
@@ -311,8 +308,7 @@ class AlignScriptReader(ScriptReader):
     def _load(self, key):
         path, addr = self.index_dict[key]
         fd = self._open(path, addr)
-        io.expect_binary(fd)
-        obj = io.read_int_vec(fd)
+        obj = io.read_int32_vec(fd, direct_access=True)
         return obj
 
 
@@ -320,16 +316,15 @@ class ArchiveWriter(Writer):
     """
         Writer for kaldi's archive && scripts (for BaseFloat matrix)
     """
-    def __init__(self, ark_path, scp_path=None, matrix=True):
+    def __init__(self, ark_path, scp_path=None):
         super(ArchiveWriter, self).__init__(ark_path, scp_path)
-        self.dumpf = io.write_common_mat if matrix else io.write_float_vec
 
     def write(self, key, obj):
         io.write_token(self.ark_file, key)
         if self.ark_path != "-":
             offset = self.ark_file.tell()
         io.write_binary_symbol(self.ark_file)
-        self.dumpf(self.ark_file, obj)
+        io.write_float_mat_vec(self.ark_file, obj)
         if self.scp_file:
             record = "{0}\t{1}:{2}\n".format(key,
                                              os.path.abspath(self.ark_path),

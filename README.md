@@ -1,12 +1,12 @@
 ## Kaldi Python IO
 
-A python (3.6+) wrapper for kaldi's data accessing.
+A python (3.6+) wrapper for Kaldi's data accessing.
 
 ### Support Type
 
-* kaldi's binary archives (*.ark)
-* kaldi's scripts (alignments & features, *.scp)
-* kaldi nnet3 data examples in binary (*.egs)
+* Kaldi's binary archives (*.ark)
+* Kaldi's scripts (alignments & features, *.scp)
+* Kaldi nnet3 data examples in binary (*.egs)
 
 ### Install
 
@@ -17,7 +17,7 @@ A python (3.6+) wrapper for kaldi's data accessing.
 * ArchiveReader && AlignArchiveReader
     ```python
     # allow only sequential index
-    ark_reader = ArchiveReader("copy-feats ark:foo.ark ark:- |", matrix=True)
+    ark_reader = ArchiveReader("copy-feats ark:foo.ark ark:- |")
     for key, _ in ark_reader:
         print(key)
     ali_reader = AlignArchiveReader("gunzip -c foo.ali.gz |")
@@ -30,7 +30,7 @@ A python (3.6+) wrapper for kaldi's data accessing.
     # allow only sequential index
     egs_reader = Nnet3EgsReader("foo.egs")
     for key, _ in egs_reader:
-        print("{}".format(key))
+        print(key)
     ```
 
 * ArchiveWriter
@@ -38,16 +38,16 @@ A python (3.6+) wrapper for kaldi's data accessing.
     with ArchiveWriter("foo.ark", "foo.scp") as writer:
         for i in range(10):
             mat = np.random.rand(100, 20)
-            writer.write("mat-{:d}".format(i), mat)
+            writer.write(f"mat-{i}", mat)
     ```
 
 * ScriptReader && AlignScriptReader
     ```python
     # allow sequential/random index
-    scp_reader = ScriptReader("shuf foo.scp | head -n 2", matrix=True)
+    scp_reader = ScriptReader("shuf foo.scp | head -n 2")
     for key, mat in scp_reader:
-        print("{}: {}".format(key, mat.shape))
+        print(f"{key}: {mat.shape}")
     ali_reader = AlignScriptReader("foo.ali.scp")
     for key, ali in ali_reader:
-        print("{}: {}".format(key, ali.shape))
+        print(f"{key}: {ali.shape}")
     ```

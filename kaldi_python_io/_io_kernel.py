@@ -21,11 +21,11 @@ def throw_on_error(ok, info=''):
         raise RuntimeError(info)
 
 
-def peek_char(fd):
+def peek_char(fd, num_chars=1):
     """ 
         Read a char and seek the point back
     """
-    peek_c = fd.peek(1)[:1]
+    peek_c = fd.peek(num_chars)[:num_chars]
     return bytes.decode(peek_c)
 
 
@@ -34,7 +34,7 @@ def expect_space(fd):
         Generally, there is a space following the string token, we need to consume it
     """
     space = bytes.decode(fd.read(1))
-    throw_on_error(space == ' ', 'Expect space, but gets {}'.format(space))
+    throw_on_error(space == ' ', f'Expect space, but gets {space}')
 
 
 def expect_binary(fd):
@@ -42,9 +42,7 @@ def expect_binary(fd):
         Read the binary flags in kaldi, the scripts only support reading egs in binary format
     """
     flags = bytes.decode(fd.read(2))
-    # throw_on_error(flags == '\0B', 'Expect binary flags \'B\', but gets {}'.format(flags))
-    throw_on_error(flags == '\0B',
-                   'Expect binary flag, but gets {}'.format(flags))
+    throw_on_error(flags == '\0B', f'Expect binary flag, but gets {flags}')
 
 
 def read_token(fd):
@@ -72,8 +70,7 @@ def expect_token(fd, ref):
         Check weather the token read equals to the reference
     """
     token = read_token(fd)
-    throw_on_error(token == ref,
-                   'Expect token \'{}\', but gets {}'.format(ref, token))
+    throw_on_error(token == ref, f'Expect token \'{ref}\', but gets {token}')
 
 
 def read_key(fd):
@@ -98,8 +95,7 @@ def read_int32(fd):
         Read a value in type 'int32' in kaldi setup
     """
     int_size = bytes.decode(fd.read(1))
-    throw_on_error(int_size == '\04',
-                   'Expect \'\\04\', but gets {}'.format(int_size))
+    throw_on_error(int_size == '\04', f'Expect \'\\04\', but gets {int_size}')
     int_str = fd.read(4)
     int_val = struct.unpack('i', int_str)
     return int_val[0]
@@ -120,7 +116,7 @@ def read_float32(fd):
     """
     float_size = bytes.decode(fd.read(1))
     throw_on_error(float_size == '\04',
-                   'Expect \'\\04\', but gets {}'.format(float_size))
+                   f'Expect \'\\04\', but gets {float_size}')
     float_str = fd.read(4)
     float_val = struct.unpack('f', float_str)
     return float_val
@@ -134,15 +130,14 @@ def read_common_mat(fd):
         Return a numpy ndarray object
     """
     mat_type = read_token(fd)
-    print_info('\tType of the common matrix: {}'.format(mat_type))
+    print_info(f'\tType of the common matrix: {mat_type}')
     if mat_type not in ["FM", "DM"]:
-        raise RuntimeError("Unknown matrix type in kaldi: {}".format(mat_type))
+        raise RuntimeError(f"Unknown matrix type in kaldi: {mat_type}")
     float_size = 4 if mat_type == 'FM' else 8
     float_type = np.float32 if mat_type == 'FM' else np.float64
     num_rows = read_int32(fd)
     num_cols = read_int32(fd)
-    print_info('\tSize of the common matrix: {} x {}'.format(
-        num_rows, num_cols))
+    print_info(f'\tSize of the common matrix: {num_rows} x {num_cols}')
     mat_data = fd.read(float_size * num_cols * num_rows)
     mat = np.fromstring(mat_data, dtype=float_type)
     return mat.reshape(num_rows, num_cols)
@@ -153,7 +148,7 @@ def write_common_mat(fd, mat):
         Write a common matrix
     """
     if mat.dtype not in [np.float32, np.float64]:
-        raise RuntimeError("Unsupported numpy dtype: {}".format(mat.dtype))
+        raise RuntimeError(f"Unsupported numpy dtype: {mat.dtype}")
     mat_type = 'FM' if mat.dtype == np.float32 else 'DM'
     write_token(fd, mat_type)
     num_rows, num_cols = mat.shape
@@ -170,13 +165,13 @@ def read_float_vec(fd, direct_access=False):
     if direct_access:
         expect_binary(fd)
     vec_type = read_token(fd)
-    print_info('\tType of the common vector: {}'.format(vec_type))
+    print_info(f'\tType of the common vector: {vec_type}')
     if vec_type not in ["FV", "DV"]:
-        raise RuntimeError("Unknown matrix type in kaldi: {}".format(vec_type))
+        raise RuntimeError(f"Unknown matrix type in kaldi: {vec_type}")
     float_size = 4 if vec_type == 'FV' else 8
     float_type = np.float32 if vec_type == 'FV' else np.float64
     dim = read_int32(fd)
-    print_info('\tDim of the common vector: {}'.format(dim))
+    print_info(f'\tDim of the common vector: {dim}')
     vec_data = fd.read(float_size * dim)
     return np.fromstring(vec_data, dtype=float_type)
 
@@ -186,7 +181,7 @@ def write_float_vec(fd, vec):
         Write a float vector
     """
     if vec.dtype not in [np.float32, np.float64]:
-        raise RuntimeError("Unsupported numpy dtype: {}".format(vec.dtype))
+        raise RuntimeError(f"Unsupported numpy dtype: {vec.dtype}")
     vec_type = 'FV' if vec.dtype == np.float32 else 'DV'
     write_token(fd, vec_type)
     if vec.ndim != 1:
@@ -196,17 +191,14 @@ def write_float_vec(fd, vec):
     fd.write(vec.tobytes())
 
 
-def read_int_vec(fd, direct_access=False):
+def read_int32_vec(fd, direct_access=False):
     """
-        Read int32 vector(alignments)
+        Read int32 vector (alignments)
     """
     if direct_access:
         expect_binary(fd)
     vec_size = read_int32(fd)
-    vec = np.zeros(vec_size, dtype=int)
-    for i in range(vec_size):
-        value = read_int32(fd)
-        vec[i] = value
+    vec = np.array([read_int32(fd) for _ in range(vec_size)], dtype=np.int32)
     return vec
 
 
@@ -219,8 +211,7 @@ def read_sparse_vec(fd):
     expect_token(fd, 'SV')
     dim = read_int32(fd)
     num_elems = read_int32(fd)
-    print_info('\tRead sparse vector(dim = {}, row = {})'.format(
-        dim, num_elems))
+    print_info(f'\tRead sparse vector(dim = {dim}, row = {num_elems})')
     sparse_vec = []
     for _ in range(num_elems):
         index = read_int32(fd)
@@ -235,7 +226,7 @@ def read_sparse_mat(fd):
         A sparse matrix contains couples of sparse vector
     """
     mat_type = read_token(fd)
-    print_info('\tFollowing matrix type: {}'.format(mat_type))
+    print_info(f'\tFollowing matrix type: {mat_type}')
     num_rows = read_int32(fd)
     sparse_mat = []
     for _ in range(num_rows):
@@ -259,7 +250,7 @@ def uncompress(cdata, cps_type, head):
     """
     min_val, prange, num_rows, num_cols = head
     # mat = np.zeros([num_rows, num_cols])
-    print_info('\tUncompress to matrix {} X {}'.format(num_rows, num_cols))
+    print_info(f'\tUncompress to matrix {num_rows} X {num_cols}')
     if cps_type == 'CM':
         # checking compressed data size, 8 is the sizeof PerColHeader
         assert len(cdata) == num_cols * (8 + num_rows)
@@ -319,8 +310,8 @@ def read_index(fd, index, cur_set):
             if c != 127:
                 throw_on_error(
                     False,
-                    'Unexpected character {} encountered while reading Index vector.'
-                    .format(c))
+                    f'Unexpected character {c} encountered while reading Index vector.'
+                )
             return read_index_tuple(fd)
     else:
         prev_index = cur_set[index - 1]
@@ -330,8 +321,8 @@ def read_index(fd, index, cur_set):
             if c != 127:
                 throw_on_error(
                     False,
-                    'Unexpected character {} encountered while reading Index vector.'
-                    .format(c))
+                    f'Unexpected character {c} encountered while reading Index vector.'
+                )
             return read_index_tuple(fd)
 
 
@@ -342,7 +333,7 @@ def read_index_vec(fd):
     """
     expect_token(fd, '<I1V>')
     size = read_int32(fd)
-    print_info('\tSize of index vector: {}'.format(size))
+    print_info(f'\tSize of index vector: {size}')
     index = []
     for i in range(size):
         cur_index = read_index(fd, i, index)
@@ -356,9 +347,9 @@ def read_compress_mat(fd):
         Return a numpy ndarray object
     """
     cps_type = read_token(fd)
-    print_info('\tFollowing matrix type: {}'.format(cps_type))
+    print_info(f'\tFollowing matrix type: {cps_type}')
     head = struct.unpack('ffii', fd.read(16))
-    print_info('\tCompress matrix header: {}'.format(head))
+    print_info(f'\tCompress matrix header: {head}')
     # 8: sizeof PerColHeader
     # head: {min_value, range, num_rows, num_cols}
     num_rows, num_cols = head[2], head[3]
@@ -369,8 +360,7 @@ def read_compress_mat(fd):
     elif cps_type == 'CM3':
         remain_size = num_rows * num_cols
     else:
-        throw_on_error(False,
-                       'Unknown matrix compressing type: {}'.format(cps_type))
+        throw_on_error(False, f'Unknown matrix compressing type: {cps_type}')
     # now uncompress it
     compress_data = fd.read(remain_size)
     mat = uncompress(compress_data, cps_type, head)
@@ -392,6 +382,30 @@ def read_float_mat(fd, direct_access=False):
     else:
         return read_common_mat(fd)
 
+def read_float_mat_vec(fd, direct_access=False):
+    """
+    Read float matrix or vector
+    """
+    if direct_access:
+        expect_binary(fd)
+    peek_type = peek_char(fd, num_chars=2)
+    # FV DV FM DM
+    if peek_type[-1] == "V":
+        return read_float_vec(fd, direct_access=False)
+    else:
+        return read_float_mat(fd, direct_access=False)
+
+def write_float_mat_vec(fd, mat_or_vec):
+    """
+    Write float matrix or vector
+    """
+    if isinstance(mat_or_vec, np.ndarray):
+        if mat_or_vec.ndim == 2:
+            write_common_mat(fd, mat_or_vec)
+        else:
+            write_float_vec(fd, mat_or_vec)
+    else:
+        raise TypeError(f"Unsupport type: {type(mat_or_vec)}")
 
 def read_nnet_io(fd):
     """ 
@@ -404,7 +418,7 @@ def read_nnet_io(fd):
 
     name = read_token(fd)
     nnet_io['name'] = name
-    print_info('\tName of NnetIo: {}'.format(name))
+    print_info(f'\tName of NnetIo: {name}')
 
     index = read_index_vec(fd)
     nnet_io['index'] = index
@@ -449,60 +463,29 @@ def read_nnet3_egs_ark(fd):
         yield key, egs
 
 
-def read_ark(fd, matrix=True):
+def read_float_ark(fd):
     """ 
+    Read float matrix/vector
         Usage:
         for key, mat in read_ark(ark):
             print(key)
             ...
     """
-    loadf = read_float_mat if matrix else read_float_vec
     while True:
         key = read_key(fd)
         if not key:
             break
-        obj = loadf(fd)
+        obj = read_float_mat_vec(fd)
         yield key, obj
 
 
-def read_ali(fd):
+def read_int32_ali(fd):
+    """
+    Read int23 vector (alignments)
+    """
     while True:
         key = read_key(fd)
         if not key:
             break
-        ali = read_int_vec(fd)
+        ali = read_int32_vec(fd)
         yield key, ali
-
-
-# -----------------test part-------------------
-def _test_ali(ali_ark):
-    with open(ali_ark, 'rb') as fd:
-        for key, _ in read_ali(fd):
-            print(key)
-
-
-def _test_write_ark(src_ark, dst_ark):
-    with open(src_ark, 'rb') as ark, open(dst_ark, 'wb') as dst:
-        for key, mat in read_ark(ark):
-            write_token(dst, key)
-            write_binary_symbol(dst)  # in binary mode
-            write_common_mat(dst, mat)
-
-
-def _test_read_ark(src_ark):
-    with open(src_ark, 'rb') as ark:
-        for _, mat in read_ark(ark):
-            print(mat.shape)
-
-
-def _test_read_nnet3_egs_ark(egs_ark):
-    with open(egs_ark, 'rb') as ark:
-        for key, egs in read_nnet3_egs_ark(ark):
-            print("{}: number of NnetIo: {:d}".format(key, len(egs)))
-
-
-if __name__ == '__main__':
-    # _test_write_ark("10.ark", "10.copy.ark")
-    # _test_read_ark("10.copy.ark")
-    # _test_ali()
-    _test_read_nnet3_egs_ark("10.egs")
