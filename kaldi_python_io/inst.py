@@ -146,10 +146,8 @@ class Reader(object):
     """
         Base class for sequential/random accessing, to be implemented
     """
-    def __init__(self, scp_path, value_processor=lambda x: x, num_tokens=2):
-        self.index_dict = parse_scps(scp_path,
-                                     value_processor=value_processor,
-                                     num_tokens=num_tokens)
+    def __init__(self, scp_path, **kwargs):
+        self.index_dict = parse_scps(scp_path, **kwargs)
         self.index_keys = list(self.index_dict.keys())
 
     # return values
