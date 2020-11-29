@@ -121,7 +121,8 @@ def parse_scps(scp_path,
     scp_dict = dict()
     line = 0
     with ext_open(scp_path, "r") as f:
-        for raw_line in f:
+        raw_lines = f.readlines()
+        for raw_line in raw_lines:
             scp_tokens = raw_line.strip().split()
             line += 1
             if scp_tokens[-1] == "|":
