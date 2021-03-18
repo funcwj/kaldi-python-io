@@ -21,14 +21,6 @@ def throw_on_error(ok, info=''):
         raise RuntimeError(info)
 
 
-def peek_char(fd, num_chars=1):
-    """ 
-        Read a char and seek the point back
-    """
-    peek_c = fd.peek(num_chars)[:num_chars]
-    return bytes.decode(peek_c)
-
-
 def expect_space(fd):
     """ 
         Generally, there is a space following the string token, we need to consume it
@@ -122,14 +114,13 @@ def read_float32(fd):
     return float_val
 
 
-def read_common_mat(fd):
+def read_common_mat(fd, mat_type):
     """ 
         Read common matrix(for class Matrix in kaldi setup)
         see matrix/kaldi-matrix.cc::
             void Matrix<Real>::Read(std::istream & is, bool binary, bool add)
         Return a numpy ndarray object
     """
-    mat_type = read_token(fd)
     print_info(f'\tType of the common matrix: {mat_type}')
     if mat_type not in ["FM", "DM"]:
         raise RuntimeError(f"Unknown matrix type in kaldi: {mat_type}")
@@ -157,14 +148,11 @@ def write_common_mat(fd, mat):
     fd.write(mat.tobytes())
 
 
-def read_float_vec(fd, direct_access=False):
+def read_float_vec(fd, vec_type):
     """
         Read float vector(for class Vector in kaldi setup)
         see matrix/kaldi-vector.cc
     """
-    if direct_access:
-        expect_binary(fd)
-    vec_type = read_token(fd)
     print_info(f'\tType of the common vector: {vec_type}')
     if vec_type not in ["FV", "DV"]:
         raise RuntimeError(f"Unknown matrix type in kaldi: {vec_type}")
@@ -220,12 +208,11 @@ def read_sparse_vec(fd):
     return sparse_vec
 
 
-def read_sparse_mat(fd):
+def read_sparse_mat(fd, mat_type):
     """ 
         Reference to function Read in SparseMatrix
         A sparse matrix contains couples of sparse vector
     """
-    mat_type = read_token(fd)
     print_info(f'\tFollowing matrix type: {mat_type}')
     num_rows = read_int32(fd)
     sparse_mat = []
@@ -341,46 +328,42 @@ def read_index_vec(fd):
     return index
 
 
-def read_compress_mat(fd):
+def read_compress_mat(fd, mat_type):
     """ 
         Reference to function Read in CompressMatrix
         Return a numpy ndarray object
     """
-    cps_type = read_token(fd)
-    print_info(f'\tFollowing matrix type: {cps_type}')
+    print_info(f'\tFollowing matrix type: {mat_type}')
     head = struct.unpack('ffii', fd.read(16))
     print_info(f'\tCompress matrix header: {head}')
     # 8: sizeof PerColHeader
     # head: {min_value, range, num_rows, num_cols}
     num_rows, num_cols = head[2], head[3]
-    if cps_type == 'CM':
+    if mat_type == 'CM':
         remain_size = num_cols * (8 + num_rows)
-    elif cps_type == 'CM2':
+    elif mat_type == 'CM2':
         remain_size = 2 * num_rows * num_cols
-    elif cps_type == 'CM3':
+    elif mat_type == 'CM3':
         remain_size = num_rows * num_cols
     else:
-        throw_on_error(False, f'Unknown matrix compressing type: {cps_type}')
+        throw_on_error(False, f'Unknown matrix compressing type: {mat_type}')
     # now uncompress it
     compress_data = fd.read(remain_size)
-    mat = uncompress(compress_data, cps_type, head)
+    mat = uncompress(compress_data, mat_type, head)
     return mat
 
 
-def read_float_mat(fd, direct_access=False):
+def read_float_mat(fd, mat_type):
     """ 
         Reference to function Read in class GeneralMatrix
         Return compress_mat/sparse_mat/common_mat
     """
-    if direct_access:
-        expect_binary(fd)
-    peek_mat_type = peek_char(fd)
-    if peek_mat_type == 'C':
-        return read_compress_mat(fd)
-    elif peek_mat_type == 'S':
-        return read_sparse_mat(fd)
+    if mat_type[0] == 'C':
+        return read_compress_mat(fd, mat_type)
+    elif mat_type[0] == 'S':
+        return read_sparse_mat(fd, mat_type)
     else:
-        return read_common_mat(fd)
+        return read_common_mat(fd, mat_type)
 
 def read_float_mat_vec(fd, direct_access=False):
     """
@@ -388,12 +371,12 @@ def read_float_mat_vec(fd, direct_access=False):
     """
     if direct_access:
         expect_binary(fd)
-    peek_type = peek_char(fd, num_chars=2)
+    vec_type = read_token(fd)
     # FV DV FM DM
-    if peek_type[-1] == "V":
-        return read_float_vec(fd, direct_access=False)
+    if vec_type[-1] == "V":
+        return read_float_vec(fd, vec_type)
     else:
-        return read_float_mat(fd, direct_access=False)
+        return read_float_mat(fd, vec_type)
 
 def write_float_mat_vec(fd, mat_or_vec):
     """
@@ -424,7 +407,8 @@ def read_nnet_io(fd):
     nnet_io['index'] = index
     print_info(index)
 
-    mat = read_float_mat(fd)
+    mat_type = read_token(fd)
+    mat = read_float_mat(fd, mat_type)
     nnet_io['matrix'] = mat
     print_info(mat)
     expect_token(fd, '</NnetIo>')
